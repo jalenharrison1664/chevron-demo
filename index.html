@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pipe Temperature Monitor</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    body { background: #0f172a; font-family: system-ui, -apple-system, sans-serif; }
+    .gauge-fill { transition: width 0.5s ease, background 0.3s ease; }
+    .pulse-critical { animation: pulse-critical 1.5s ease-in-out infinite; }
+    @keyframes pulse-critical { 0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.5); } 50% { opacity: 0.9; box-shadow: 0 0 0 12px rgba(239, 68, 68, 0); } }
+    .chart-container { position: relative; height: 220px; }
+  </style>
+</head>
+<body class="text-gray-200 min-h-screen">
+
+  <div class="max-w-6xl mx-auto p-6 space-y-6">
+    <!-- Header -->
+    <div class="flex items-center justify-between flex-wrap gap-4">
+      <div>
+        <h1 class="text-2xl font-bold flex items-center gap-2">
+          <i class="fas fa-wave-square text-blue-400"></i>
+          Pipe Temperature Monitor
+        </h1>
+        <p class="text-gray-400 text-sm mt-1">Real-time temperature monitoring and alert system.</p>
+      </div>
+      <div class="flex items-center gap-4">
+        <div id="systemStatus" class="flex items-center gap-2 text-sm">
+          <span class="w-2 h-2 rounded-full bg-green-500" id="statusDot"></span>
+          <span id="statusText">System Status: Normal • Live</span>
+        </div>
+        <button id="pauseBtn" class="px-4 py-2 rounded-lg border border-gray-600 hover:bg-gray-800 transition text-sm">
+          Pause Monitoring
+        </button>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <!-- Pipe Temperature -->
+      <div class="bg-slate-800/80 border border-slate-700 rounded-xl p-6">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-lg font-semibold flex items-center gap-2">
+            <i class="fas fa-thermometer-half text-amber-400"></i>
+            Pipe Temperature
+          </h2>
+          <div class="flex rounded-lg overflow-hidden border border-slate-600">
+            <button id="unitC" class="unit-btn px-3 py-1.5 text-sm bg-blue-600 text-white">°C</button>
+            <button id="unitF" class="unit-btn px-3 py-1.5 text-sm bg-slate-700 text-gray-400 hover:bg-slate-600">°F</button>
+          </div>
+        </div>
+        <div id="tempDisplay" class="text-5xl font-bold mb-2 text-green-400">0.0°C</div>
+        <div class="h-3 bg-slate-700 rounded-full overflow-hidden mb-2">
+          <div id="gaugeFill" class="gauge-fill h-full rounded-full bg-green-500" style="width: 0%; max-width: 100%;"></div>
+        </div>
+        <div class="flex justify-between text-xs text-gray-500">
+          <span id="scaleMin">0°C</span>
+          <span id="scaleMid1">75°C</span>
+          <span id="scaleMid2">95°C</span>
+          <span id="scaleMax">150°C</span>
+        </div>
+      </div>
+
+      <!-- Status Alerts -->
+      <div class="bg-slate-800/80 border border-slate-700 rounded-xl p-6">
+        <h2 class="text-lg font-semibold flex items-center gap-2 mb-4">
+          <i class="fas fa-exclamation-triangle text-amber-400"></i>
+          Status Alerts
+        </h2>
+        <div id="alertBox" class="rounded-lg p-4 mb-4 bg-slate-700/50 border border-slate-600">
+          <p id="alertMessage" class="text-gray-300">No alerts. Temperature within safe range.</p>
+        </div>
+        <div class="grid grid-cols-3 gap-2 text-xs">
+          <div class="bg-green-900/40 border border-green-700/50 rounded p-2 text-green-300">Safe: 0–75°C</div>
+          <div class="bg-amber-900/40 border border-amber-700/50 rounded p-2 text-amber-300">Warning: 76–95°C</div>
+          <div class="bg-red-900/40 border border-red-700/50 rounded p-2 text-red-300">Critical: 96°C+</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Temperature History -->
+    <div class="bg-slate-800/80 border border-slate-700 rounded-xl p-6">
+      <h2 class="text-lg font-semibold flex items-center gap-2 mb-4">
+        <i class="fas fa-chart-line text-blue-400"></i>
+        Temperature History
+      </h2>
+      <div class="chart-container">
+        <canvas id="historyChart"></canvas>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <!-- Data Export -->
+      <div class="bg-slate-800/80 border border-slate-700 rounded-xl p-6">
+        <h2 class="text-lg font-semibold flex items-center gap-2 mb-4">
+          <i class="fas fa-file-export text-emerald-400"></i>
+          Data Export
+        </h2>
+        <div class="space-y-3">
+          <div>
+            <label class="text-gray-400 text-sm block mb-1">Export format</label>
+            <select id="exportFormat" class="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500">
+              <option value="txt">TXT – Plain text report</option>
+              <option value="csv">CSV – Spreadsheet</option>
+              <option value="html">HTML – Visual report</option>
+            </select>
+          </div>
+          <div class="flex items-center gap-2">
+            <input type="checkbox" id="autoExport" class="rounded border-slate-600 bg-slate-700 text-blue-500 focus:ring-blue-500">
+            <label for="autoExport" class="text-sm text-gray-300">Auto-export every</label>
+            <select id="autoExportInterval" class="bg-slate-700 border border-slate-600 rounded px-2 py-1 text-sm">
+              <option value="60">1 min</option>
+              <option value="300">5 min</option>
+              <option value="600">10 min</option>
+              <option value="3600">1 hour</option>
+            </select>
+          </div>
+          <button id="exportBtn" class="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 rounded-lg transition font-medium text-sm">
+            <i class="fas fa-download"></i> Export now
+          </button>
+        </div>
+      </div>
+
+      <!-- Email Notifications -->
+      <div class="bg-slate-800/80 border border-slate-700 rounded-xl p-6">
+        <h2 class="text-lg font-semibold flex items-center gap-2 mb-4">
+          <i class="fas fa-bell text-amber-400"></i>
+          Email Notifications
+        </h2>
+        <label class="flex items-center gap-2 cursor-pointer mb-2">
+          <input type="checkbox" id="emailEnabled" class="rounded border-slate-600 bg-slate-700 text-blue-500 focus:ring-blue-500">
+          <span class="text-sm">Enable email notifications</span>
+        </label>
+        <p class="text-xs text-gray-500">Uses your default email client to send alerts when thresholds are crossed.</p>
+        <button id="testEmailBtn" class="mt-3 text-sm text-blue-400 hover:text-blue-300">Send test email</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
