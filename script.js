@@ -978,6 +978,66 @@
     showToast('Ticket marked as resolved', 'success');
   }
 
+  function resetMonitoringSystem() {
+    // Reset monitoring telemetry only
+    currentTempC = 70;
+    pumpLoad = 20;
+    pressure = 30;
+    flowRate = 55;
+    tempHistory = [];
+    criticalStartTime = null;
+    criticalTimerId = null;
+    emailSentForCurrentCriticalEvent = false;
+    
+    // Reset pipe data
+    pipeIds.forEach(pipeId => {
+      pipesData[pipeId].temp = 70;
+      pipesData[pipeId].pumpLoad = 20;
+      pipesData[pipeId].pressure = 30;
+      pipesData[pipeId].flowRate = 55;
+      pipesData[pipeId].history = [];
+    });
+    
+    // Reset monitoring UI
+    updateDisplay();
+    updateChart();
+    updateCriticalDurationUI(0, false);
+    document.getElementById('criticalDurationBanner').classList.add('hidden');
+    
+    showToast('Monitoring system reset', 'success');
+  }
+
+  function clearMaintenanceSystem() {
+    // Show confirmation dialog
+    if (!confirm('Are you sure you want to clear maintenance system? This will remove all tickets and workflow history.')) {
+      return;
+    }
+    
+    // Clear maintenance data only
+    tickets = [];
+    workflowTickets = [];
+    communicationsLog = [];
+    currentAlert = null;
+    systemStates = {
+      monitoring: 'Active',
+      ai: 'Ready',
+      maintenance: 'Idle',
+      inventory: 'Available'
+    };
+    
+    // Reset maintenance UI
+    updateTicketsUI();
+    updateWorkflowUI();
+    updateAlertDisplay();
+    updateCommunicationLogUI();
+    updateSystemStatus('monitoring', 'Active');
+    updateSystemStatus('ai', 'Ready');
+    updateSystemStatus('maintenance', 'Idle');
+    updateSystemStatus('inventory', 'Available');
+    
+    showToast('Maintenance system cleared', 'success');
+  }
+
   function resetCommunicationsSystem() {
     // Clear all states
     currentAlert = null;
@@ -1492,7 +1552,8 @@
   document.getElementById('triggerAlertBtn').addEventListener('click', triggerCriticalAlert);
   document.getElementById('dispatchTechnicianBtn').addEventListener('click', dispatchTechnician);
   document.getElementById('markResolvedBtn').addEventListener('click', markTicketResolved);
-  document.getElementById('resetSystemBtn').addEventListener('click', resetCommunicationsSystem);
+  document.getElementById('resetSystemBtn').addEventListener('click', resetMonitoringSystem);
+  document.getElementById('clearMaintenanceBtn').addEventListener('click', clearMaintenanceSystem);
 
   // Initialize communications hub UI
   updateSystemStatus('monitoring', 'Active');
