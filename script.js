@@ -18,6 +18,23 @@
   let pumpLoad = 45;
   let pressure = 50;
   let chart = null;
+  let flowRate = 55;
+
+  // Multi-pipe system
+  let selectedPipeId = 'PIPE-A1';
+  let pipesData = {};
+  const pipeIds = ['PIPE-A1', 'PIPE-B2', 'PIPE-C3', 'PIPE-D4', 'PIPE-E5', 'PIPE-F6'];
+  
+  // Initialize pipe data
+  pipeIds.forEach(id => {
+    pipesData[id] = {
+      temp: 55 + Math.random() * 20 - 10,
+      history: [],
+      pumpLoad: 45 + Math.random() * 20,
+      pressure: 50 + Math.random() * 20,
+      flowRate: 50 + Math.random() * 10
+    };
+  });
 
   const tempDisplay = document.getElementById('tempDisplay');
   const gaugeFill = document.getElementById('gaugeFill');
@@ -79,10 +96,27 @@
     container.appendChild(el);
     setTimeout(function () { el.remove(); }, 4000);
   }
-  function getStatus(temp) {
+  function getPipeStatus(temp) {
     if (temp <= SAFE_MAX) return 'normal';
     if (temp <= WARNING_MAX) return 'warning';
     return 'critical';
+  }
+
+  function getStatus(temp) {
+    return getPipeStatus(temp);
+  }
+  function formatTimeToHoursMinutes(minutes) {
+    if (minutes < 60) {
+      return Math.round(minutes) + ' minutes';
+    } else {
+      const hours = Math.floor(minutes / 60);
+      const remainingMinutes = Math.round(minutes % 60);
+      if (remainingMinutes === 0) {
+        return hours + ' hour' + (hours === 1 ? '' : 's');
+      } else {
+        return hours + ' hour' + (hours === 1 ? '' : 's') + ' ' + remainingMinutes + ' minutes';
+      }
+    }
   }
   function randomWalk(prev, range = 3) {
     return prev + (Math.random() - 0.5) * 2 * range;
@@ -94,8 +128,9 @@
   }
 
   function getTempRate() {
-    if (!tempHistory || tempHistory.length < 5) return 0;
-    const recent = tempHistory.slice(-5);
+    const pipeData = pipesData[selectedPipeId];
+    if (!pipeData || !pipeData.history || pipeData.history.length < 5) return 0;
+    const recent = pipeData.history.slice(-5);
     const t0 = recent[0].t;
     const t1 = recent[recent.length - 1].t;
     const minutes = (t1 - t0) / 60000;
@@ -104,9 +139,10 @@
   }
 
   function getTrendRate() {
-    if (!tempHistory || tempHistory.length < 10) return 0;
-    const n = Math.min(TREND_READINGS, tempHistory.length);
-    const slice = tempHistory.slice(-n);
+    const pipeData = pipesData[selectedPipeId];
+    if (!pipeData || !pipeData.history || pipeData.history.length < 10) return 0;
+    const n = Math.min(TREND_READINGS, pipeData.history.length);
+    const slice = pipeData.history.slice(-n);
     const t0 = slice[0].t;
     const t1 = slice[slice.length - 1].t;
     const minutes = (t1 - t0) / 60000;
@@ -115,10 +151,12 @@
   }
 
   function getAcceleration() {
-    if (!tempHistory || tempHistory.length < 15) return 0;
-    const mid = Math.floor(tempHistory.length / 2);
-    const firstHalf = tempHistory.slice(0, mid);
-    const secondHalf = tempHistory.slice(mid);
+    const pipeData = pipesData[selectedPipeId];
+    if (!pipeData || !pipeData.history || pipeData.history.length < 15) return 0;
+    const history = pipeData.history;
+    const mid = Math.floor(history.length / 2);
+    const firstHalf = history.slice(0, mid);
+    const secondHalf = history.slice(mid);
     if (firstHalf.length < 3 || secondHalf.length < 3) return 0;
     const t0 = firstHalf[0].t, t1 = firstHalf[firstHalf.length - 1].t;
     const t2 = secondHalf[0].t, t3 = secondHalf[secondHalf.length - 1].t;
@@ -151,26 +189,39 @@
       scaleMid1.textContent = Math.round(cToF(75)) + '°F';
       scaleMid2.textContent = Math.round(cToF(95)) + '°F';
       scaleMax.textContent = Math.round(cToF(GAUGE_MAX)) + '°F';
-      if (rangeSafe) rangeSafe.textContent = 'Safe Range: 0 – 167°F';
-      if (rangeWarning) rangeWarning.textContent = 'Warning Range: 169 – 203°F';
-      if (rangeCritical) rangeCritical.textContent = 'Critical Range: 205°F+';
+      // Update status range displays
+      const rangeElements = document.querySelectorAll('.space-y-2 > div');
+      if (rangeElements[0]) rangeElements[0].querySelector('span:last-child').textContent = '0 - ' + Math.round(cToF(75)) + '°F';
+      if (rangeElements[1]) rangeElements[1].querySelector('span:last-child').textContent = Math.round(cToF(76)) + ' - ' + Math.round(cToF(95)) + '°F';
+      if (rangeElements[2]) rangeElements[2].querySelector('span:last-child').textContent = Math.round(cToF(95)) + '°F+';
     } else {
       scaleMin.textContent = '0°C';
       scaleMid1.textContent = '75°C';
       scaleMid2.textContent = '95°C';
       scaleMax.textContent = GAUGE_MAX + '°C';
-      if (rangeSafe) rangeSafe.textContent = 'Safe Range: 0 – 75°C';
-      if (rangeWarning) rangeWarning.textContent = 'Warning Range: 76 – 95°C';
-      if (rangeCritical) rangeCritical.textContent = 'Critical Range: 96°C+';
+      // Update status range displays
+      const rangeElements = document.querySelectorAll('.space-y-2 > div');
+      if (rangeElements[0]) rangeElements[0].querySelector('span:last-child').textContent = '0 - 75°C';
+      if (rangeElements[1]) rangeElements[1].querySelector('span:last-child').textContent = '76 - 95°C';
+      if (rangeElements[2]) rangeElements[2].querySelector('span:last-child').textContent = '95°C+';
     }
   }
 
   function updateDisplay() {
+    const pipeData = pipesData[selectedPipeId];
+    if (!pipeData) return;
+    
+    currentTempC = pipeData.temp;
+    pumpLoad = pipeData.pumpLoad;
+    pressure = pipeData.pressure;
+    flowRate = pipeData.flowRate;
+    tempHistory = pipeData.history;
+    
     const status = getStatus(currentTempC);
     const displayTemp = useFahrenheit ? cToF(currentTempC) : currentTempC;
     const unit = useFahrenheit ? '°F' : '°C';
     tempDisplay.textContent = displayTemp.toFixed(1) + unit;
-    tempDisplay.className = 'text-5xl font-bold mb-2 ' +
+    tempDisplay.className = 'text-6xl font-bold mb-2 ' +
       (status === 'normal' ? 'text-[var(--figma-green)]' : status === 'warning' ? 'text-[var(--figma-orange)]' : 'text-[var(--figma-red)]');
 
     var pipeIcon = document.getElementById('pipeTempIcon');
@@ -235,12 +286,63 @@
     updateScaleLabels();
     updateOverheatRisk();
     updateFailurePrediction();
+    updatePipeCards();
     var footerUpdated = document.getElementById('footerLastUpdated');
     var footerPoints = document.getElementById('footerDataPoints');
     var footerStatus = document.getElementById('footerMonitoringStatus');
     if (footerUpdated) footerUpdated.textContent = new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true });
     if (footerPoints) footerPoints.textContent = tempHistory.length;
     if (footerStatus) footerStatus.textContent = paused ? 'Paused' : 'Active';
+  }
+
+  function updatePipeCards() {
+    const container = document.getElementById('pipeCards');
+    if (!container) return;
+    
+    container.innerHTML = pipeIds.map(pipeId => {
+      const pipeData = pipesData[pipeId];
+      const status = getPipeStatus(pipeData.temp);
+      const displayTemp = useFahrenheit ? cToF(pipeData.temp) : pipeData.temp;
+      const unit = useFahrenheit ? '°F' : '°C';
+      const isSelected = pipeId === selectedPipeId;
+      
+      let borderColor = 'border-[var(--figma-border)]';
+      let bgColor = 'bg-[var(--figma-bg-card)]';
+      let statusColor = 'text-[var(--figma-green)]';
+      let statusBg = 'bg-[var(--figma-green)]/20';
+      
+      if (status === 'warning') {
+        statusColor = 'text-[var(--figma-orange)]';
+        statusBg = 'bg-[var(--figma-orange)]/20';
+      } else if (status === 'critical') {
+        statusColor = 'text-[var(--figma-red)]';
+        statusBg = 'bg-[var(--figma-red)]/20';
+        borderColor = 'border-[var(--figma-red)]';
+        bgColor = 'bg-[var(--figma-red)]/10';
+      }
+      
+      if (isSelected) {
+        borderColor = 'border-[var(--figma-red)]';
+        bgColor = 'bg-[var(--figma-red)]/20';
+      }
+      
+      return `<div class="pipe-card cursor-pointer p-3 rounded-[var(--figma-radius)] border ${borderColor} ${bgColor} transition-all hover:opacity-80 ${isSelected ? 'ring-2 ring-[var(--figma-red)]' : ''}" data-pipe-id="${pipeId}">
+        <div class="text-center">
+          <div class="text-[var(--figma-text-muted)] text-xs mb-1">${pipeId}</div>
+          <div class="text-lg font-bold ${statusColor}">${displayTemp.toFixed(1)}${unit}</div>
+          <div class="text-xs px-2 py-1 rounded ${statusBg} ${statusColor} mt-1">ALERT</div>
+        </div>
+      </div>`;
+    }).join('');
+    
+    // Add click handlers
+    container.querySelectorAll('.pipe-card').forEach(card => {
+      card.addEventListener('click', function() {
+        selectedPipeId = this.getAttribute('data-pipe-id');
+        updateDisplay();
+        updateChart();
+      });
+    });
   }
 
   function updateOverheatRisk() {
@@ -270,17 +372,21 @@
     if (stableMsgEl) stableMsgEl.classList.toggle('hidden', tempRate > 0);
     const trendRate = getTrendRate();
     const mins = timeToCritical(currentTempC, trendRate);
-    if (timeEl) timeEl.textContent = mins != null ? (mins < 1 ? '0 min' : Math.round(mins) + ' min') : '—';
+    if (timeEl) timeEl.textContent = mins != null ? (mins < 1 ? '0 min' : formatTimeToHoursMinutes(mins)) : '—';
     if (timeEl) timeEl.style.color = 'var(--figma-text)';
 
     const tempRateEl = document.getElementById('overheatTempRate');
     const pumpEl = document.getElementById('overheatPumpLoad');
     const pressureEl = document.getElementById('overheatPressure');
     const currentTempEl = document.getElementById('overheatCurrentTemp');
+    const flowRateEl = document.getElementById('flowRate');
+    
     if (tempRateEl) tempRateEl.textContent = (tempRate >= 0 ? '+' : '') + tempRate.toFixed(2) + '°C/min';
     if (pumpEl) { pumpEl.textContent = Math.round(pumpLoad) + '%'; pumpEl.className = 'font-medium text-pump'; }
     if (pressureEl) pressureEl.textContent = Math.round(pressure) + ' PSI';
     if (currentTempEl) currentTempEl.textContent = currentTempC.toFixed(1) + '°C';
+    if (flowRateEl) flowRateEl.textContent = Math.round(flowRate) + ' GPM';
+    
     if (alertBoxEl) {
       alertBoxEl.classList.toggle('hidden', risk < 50);
       if (alertTextEl) alertTextEl.textContent = risk >= 75 ? 'Critical risk detected! Consider immediate intervention to prevent pump damage.' : 'Elevated risk detected. Monitor closely and prepare for potential intervention.';
@@ -311,7 +417,7 @@
     const confPctEl = document.getElementById('failureConfidencePct');
     if (probEl) probEl.textContent = Math.round(prob) + '%';
     if (probBarEl) probBarEl.style.width = Math.min(100, prob) + '%';
-    if (timeEl) timeEl.textContent = mins != null ? (mins < 1 ? '0 minutes' : Math.round(mins) + ' minutes') : 'Not Applicable';
+    if (timeEl) timeEl.textContent = mins != null ? (mins < 1 ? '0 minutes' : formatTimeToHoursMinutes(mins)) : 'Not Applicable';
     if (confEl) confEl.textContent = confidenceLabel;
     if (confBarEl) confBarEl.style.width = confidencePct + '%';
     if (confPctEl) confPctEl.textContent = confidencePct + '%';
@@ -499,16 +605,57 @@
 
   function tick() {
     if (paused) return;
-    currentTempC = Math.max(0, Math.min(GAUGE_MAX, randomWalk(currentTempC)));
-    if (Math.random() < 0.08) currentTempC += (Math.random() - 0.3) * 25;
-    currentTempC = Math.max(0, Math.min(GAUGE_MAX, currentTempC));
-    tempHistory.push({ t: Date.now(), c: currentTempC });
-    if (tempHistory.length > HISTORY_LENGTH) tempHistory.shift();
-    var tempRate = getTempRate();
-    pumpLoad = computePumpLoadFromTemp(currentTempC);
-    pressure = computePressureFromTempAndRate(currentTempC, tempRate);
+    
+    // Update all pipes
+    pipeIds.forEach(pipeId => {
+      const pipeData = pipesData[pipeId];
+      
+      // Base random walk with small fluctuations
+      pipeData.temp = Math.max(0, Math.min(GAUGE_MAX, randomWalk(pipeData.temp, 2)));
+      
+      // Add occasional spikes based on probability
+      const spikeChance = Math.random();
+      if (spikeChance < 0.05) {
+        // 5% chance of moderate spike
+        pipeData.temp += Math.random() * 15 + 5;
+      } else if (spikeChance < 0.08) {
+        // 3% chance of large spike
+        pipeData.temp += Math.random() * 25 + 15;
+      } else if (spikeChance < 0.15) {
+        // 7% chance of small increase
+        pipeData.temp += Math.random() * 8 + 2;
+      }
+      
+      // Add small random fluctuations every tick
+      pipeData.temp += (Math.random() - 0.5) * 1.5;
+      
+      // Ensure temperature stays within bounds
+      pipeData.temp = Math.max(10, Math.min(GAUGE_MAX, pipeData.temp));
+      
+      // Add to history
+      pipeData.history.push({ t: Date.now(), c: pipeData.temp });
+      if (pipeData.history.length > HISTORY_LENGTH) pipeData.history.shift();
+      
+      // Calculate derived values
+      const tempRate = getTempRateForPipe(pipeId);
+      pipeData.pumpLoad = computePumpLoadFromTemp(pipeData.temp);
+      pipeData.pressure = computePressureFromTempAndRate(pipeData.temp, tempRate);
+      pipeData.flowRate = 50 + Math.random() * 20 + (pipeData.temp > 100 ? 10 : 0);
+    });
+    
     updateDisplay();
     updateChart();
+  }
+  
+  function getTempRateForPipe(pipeId) {
+    const pipeData = pipesData[pipeId];
+    if (!pipeData || !pipeData.history || pipeData.history.length < 5) return 0;
+    const recent = pipeData.history.slice(-5);
+    const t0 = recent[0].t;
+    const t1 = recent[recent.length - 1].t;
+    const minutes = (t1 - t0) / 60000;
+    if (minutes <= 0) return 0;
+    return (recent[recent.length - 1].c - recent[0].c) / minutes;
   }
 
   function initChart() {
@@ -559,8 +706,11 @@
 
   function updateChart() {
     if (!chart) return;
-    const labels = tempHistory.map(d => formatTime12h(d.t));
-    const data = tempHistory.map(d => d.c);
+    const pipeData = pipesData[selectedPipeId];
+    if (!pipeData) return;
+    
+    const labels = pipeData.history.map(d => formatTime12h(d.t));
+    const data = pipeData.history.map(d => d.c);
     chart.data.labels = labels;
     chart.data.datasets[0].data = data;
     chart.update('none');
@@ -570,24 +720,26 @@
     const format = exportFormat.value;
     const now = new Date();
     const stamp = now.toISOString().slice(0, 19).replace(/[:T]/g, '-');
-    const avg = tempHistory.length ? tempHistory.reduce((s, d) => s + d.c, 0) / tempHistory.length : 0;
-    const min = tempHistory.length ? Math.min(...tempHistory.map(d => d.c)) : 0;
-    const max = tempHistory.length ? Math.max(...tempHistory.map(d => d.c)) : 0;
+    const pipeData = pipesData[selectedPipeId];
+    const history = pipeData ? pipeData.history : [];
+    const avg = history.length ? history.reduce((s, d) => s + d.c, 0) / history.length : 0;
+    const min = history.length ? Math.min(...history.map(d => d.c)) : 0;
+    const max = history.length ? Math.max(...history.map(d => d.c)) : 0;
 
     if (format === 'txt') {
       let out = 'Pipe Temperature Report\n' + 'Generated: ' + now.toLocaleString() + '\n\n';
       out += 'Statistics: Avg ' + avg.toFixed(1) + '°C, Min ' + min.toFixed(1) + '°C, Max ' + max.toFixed(1) + '°C\n\n';
       out += 'Time\t\tTemperature (°C)\n';
-      tempHistory.forEach(d => { out += formatTime12h(d.t) + '\t' + d.c.toFixed(1) + '\n'; });
+      history.forEach(d => { out += formatTime12h(d.t) + '\t' + d.c.toFixed(1) + '\n'; });
       download('temperature-report-' + stamp + '.txt', 'text/plain', out);
     } else if (format === 'csv') {
       let out = 'Timestamp,Temperature_C\n';
-      tempHistory.forEach(d => { out += new Date(d.t).toISOString() + ',' + d.c.toFixed(2) + '\n'; });
+      history.forEach(d => { out += new Date(d.t).toISOString() + ',' + d.c.toFixed(2) + '\n'; });
       download('temperature-data-' + stamp + '.csv', 'text/csv', out);
     } else {
-      const safe = tempHistory.filter(d => d.c <= SAFE_MAX).length;
-      const warn = tempHistory.filter(d => d.c > SAFE_MAX && d.c <= WARNING_MAX).length;
-      const crit = tempHistory.filter(d => d.c > WARNING_MAX).length;
+      const safe = history.filter(d => d.c <= SAFE_MAX).length;
+      const warn = history.filter(d => d.c > SAFE_MAX && d.c <= WARNING_MAX).length;
+      const crit = history.filter(d => d.c > WARNING_MAX).length;
       let html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Temperature Report</title><style>';
       html += 'body{font-family:system-ui;background:#0f172a;color:#e2e8f0;padding:2rem;max-width:900px;margin:0 auto;}';
       html += 'h1{color:#60a5fa;} .stat{display:inline-block;margin-right:2rem;margin-bottom:1rem;}';
@@ -598,13 +750,13 @@
       html += '<p><span class="stat">Average: ' + avg.toFixed(1) + '°C</span><span class="stat">Min: ' + min.toFixed(1) + '°C</span><span class="stat">Max: ' + max.toFixed(1) + '°C</span></p>';
       html += '<p>Status distribution: Safe ' + safe + ', Warning ' + warn + ', Critical ' + crit + '</p>';
       html += '<svg viewBox="0 0 800 200" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#22c55e"/><stop offset="0.5" stop-color="#f59e0b"/><stop offset="1" stop-color="#ef4444"/></linearGradient></defs>';
-      const pts = tempHistory.map((d, i) => [(i / (tempHistory.length - 1 || 1)) * 780 + 10, 190 - (d.c / GAUGE_MAX) * 180].join(',')).join(' ');
+      const pts = history.map((d, i) => [(i / (history.length - 1 || 1)) * 780 + 10, 190 - (d.c / GAUGE_MAX) * 180].join(',')).join(' ');
       html += '<polyline fill="none" stroke="#60a5fa" stroke-width="2" points="' + pts + '"/>';
       html += '<line x1="0" y1="100" x2="800" y2="100" stroke="#22c55e" stroke-dasharray="5" opacity="0.6"/>';
       html += '<line x1="0" y1="76" x2="800" y2="76" stroke="#f59e0b" stroke-dasharray="5" opacity="0.6"/>';
       html += '</svg>';
       html += '<table><tr><th>Time</th><th>Temperature (°C)</th><th>Status</th></tr>';
-      tempHistory.slice(-20).reverse().forEach(d => {
+      history.slice(-20).reverse().forEach(d => {
         const s = getStatus(d.c);
         html += '<tr><td>' + formatTime12h(d.t) + '</td><td>' + d.c.toFixed(1) + '</td><td class="' + s + '">' + (s === 'normal' ? 'Safe' : s === 'warning' ? 'Warning' : 'Critical') + '</td></tr>';
       });
@@ -699,14 +851,26 @@
     showToast('Manual maintenance ticket created.', 'success');
   });
 
-  for (let i = 0; i < 30; i++) {
-    currentTempC = randomWalk(currentTempC);
-    currentTempC = Math.max(0, Math.min(GAUGE_MAX, currentTempC));
-    tempHistory.push({ t: Date.now() - (30 - i) * UPDATE_MS, c: currentTempC });
+  // Initialize all pipes with some history
+  pipeIds.forEach(pipeId => {
+    const pipeData = pipesData[pipeId];
+    for (let i = 0; i < 30; i++) {
+      pipeData.temp = randomWalk(pipeData.temp);
+      pipeData.temp = Math.max(0, Math.min(GAUGE_MAX, pipeData.temp));
+      pipeData.history.push({ t: Date.now() - (30 - i) * UPDATE_MS, c: pipeData.temp });
+    }
+  });
+  
+  // Set initial values from selected pipe
+  const selectedPipeData = pipesData[selectedPipeId];
+  if (selectedPipeData) {
+    currentTempC = selectedPipeData.temp;
+    pumpLoad = selectedPipeData.pumpLoad;
+    pressure = selectedPipeData.pressure;
+    flowRate = selectedPipeData.flowRate;
+    tempHistory = selectedPipeData.history;
   }
-  var seedRate = getTempRate();
-  pumpLoad = computePumpLoadFromTemp(currentTempC);
-  pressure = computePressureFromTempAndRate(currentTempC, seedRate);
+  
   initChart();
   updateDisplay();
   updateChart();
