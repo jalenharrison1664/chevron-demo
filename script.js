@@ -87,6 +87,30 @@
   let criticalTimerId = null;
   let tickets = [];
   let ticketIdCounter = 1;
+  let emailSentForCurrentCriticalEvent = false;
+  
+  // Workflow system
+  let workflowTickets = [];
+  let workflowIdCounter = 1;
+  const technicians = ['Sarah Chen', 'Alex Rivera', 'Mike Johnson', 'Lisa Wang', 'David Kim'];
+  const partsInventory = {
+    'Cooling valve': { available: true, quantity: 5 },
+    'Pump seal': { available: true, quantity: 8 },
+    'Pressure gasket': { available: true, quantity: 12 },
+    'Temperature sensor': { available: true, quantity: 6 },
+    'Control valve': { available: false, quantity: 0 },
+    'Flow meter': { available: true, quantity: 3 }
+  };
+
+  // Communications Hub System
+  let communicationsLog = [];
+  let currentAlert = null;
+  let systemStates = {
+    monitoring: 'Active',
+    ai: 'Ready',
+    maintenance: 'Idle',
+    inventory: 'Available'
+  };
 
   function cToF(c) { return (c * 9 / 5) + 32; }
 
@@ -297,6 +321,7 @@
       if (criticalTimerId) clearInterval(criticalTimerId);
       criticalTimerId = null;
       criticalStartTime = null;
+      emailSentForCurrentCriticalEvent = false;
       updateCriticalDurationUI(0, false);
       document.getElementById('criticalDurationBanner').classList.add('hidden');
     }
@@ -408,6 +433,9 @@
       alertBoxEl.classList.toggle('hidden', risk < 50);
       if (alertTextEl) alertTextEl.textContent = risk >= 75 ? 'Critical risk detected! Consider immediate intervention to prevent pump damage.' : 'Elevated risk detected. Monitor closely and prepare for potential intervention.';
     }
+
+    // Update AI explanation
+    updateAIExplanation(risk, tempRate, pumpLoad, pressure);
   }
 
   function updateFailurePrediction() {
@@ -454,6 +482,89 @@
     if (trendRateEl) trendRateEl.textContent = (trendRate >= 0 ? '+' : '') + trendRate.toFixed(2) + '°C/min';
     if (trendAccelEl) trendAccelEl.textContent = (accel >= 0 ? '+' : '') + accel.toFixed(2) + '°/min²';
     if (trendDataPointsEl) trendDataPointsEl.textContent = dataPoints;
+  }
+
+  function updateAIExplanation(risk, tempRate, pumpLoad, pressure) {
+    const aiExplanationEl = document.getElementById('ai-explanation');
+    const aiReportEl = document.getElementById('ai-report');
+    
+    if (!aiExplanationEl) return;
+    
+    let problem = '';
+    let recommendedActions = [];
+    
+    if (risk >= 75) {
+      // Critical risk
+      if (tempRate > 2) {
+        problem = 'Problem detected: Pump temperature rising rapidly due to elevated load and pressure.';
+        recommendedActions = ['<b>Reduce pump load to 60%</b>', '<b>increase monitoring frequency</b>', '<b>prepare cooling system</b>'];
+      } else if (pumpLoad > 80) {
+        problem = 'Problem detected: Excessive pump load causing temperature buildup.';
+        recommendedActions = ['<b>Reduce pump load to 60%</b>', '<b>check for blockages</b>', '<b>monitor pressure levels</b>'];
+      } else if (pressure > 70) {
+        problem = 'Problem detected: High pressure contributing to temperature increase.';
+        recommendedActions = ['<b>Reduce system pressure</b>', '<b>check valve operations</b>', '<b>inspect for flow restrictions</b>'];
+      } else {
+        problem = 'Problem detected: Multiple factors contributing to elevated temperature risk.';
+        recommendedActions = ['<b>Reduce pump load to 60%</b>', '<b>increase monitoring frequency</b>', '<b>prepare cooling system</b>'];
+      }
+    } else if (risk >= 50) {
+      // Elevated risk
+      if (tempRate > 1) {
+        problem = 'Problem detected: Gradual temperature increase detected.';
+        recommendedActions = ['<b>Monitor temperature trend</b>', '<b>prepare contingency plans</b>', '<b>check pump efficiency</b>'];
+      } else if (pumpLoad > 70) {
+        problem = 'Problem detected: Pump load approaching critical levels.';
+        recommendedActions = ['<b>Consider load reduction</b>', '<b>increase monitoring frequency</b>', '<b>prepare cooling systems</b>'];
+      } else {
+        problem = 'Problem detected: System parameters showing elevated risk patterns.';
+        recommendedActions = ['<b>Increase monitoring</b>', '<b>review system parameters</b>', '<b>prepare intervention plans</b>'];
+      }
+    } else {
+      // Normal operation
+      aiExplanationEl.innerHTML = '';
+      if (aiReportEl) aiReportEl.classList.add('hidden');
+      return;
+    }
+    
+    const explanation = problem + '<br>Recommended actions: ' + recommendedActions.join(', ') + '.';
+    aiExplanationEl.innerHTML = explanation;
+    
+    // Optional AI report integration (non-breaking)
+    if (aiReportEl && typeof generateAIExplanation === 'function') {
+      try {
+        const sensorData = {
+          temperature: currentTempC,
+          tempRate: tempRate,
+          pumpLoad: pumpLoad,
+          pressure: pressure,
+          flowRate: flowRate,
+          risk: risk,
+          timestamp: new Date().toISOString()
+        };
+        
+        const ticket = {
+          id: ticketIdCounter,
+          severity: risk >= 75 ? 'critical' : 'warning',
+          pipeId: selectedPipeId,
+          temperature: currentTempC,
+          timestamp: new Date().toISOString()
+        };
+        
+        generateAIExplanation(sensorData, ticket)
+          .then(report => {
+            aiReportEl.innerHTML = '<strong>AI Technician Report:</strong><br>' + report;
+            aiReportEl.classList.remove('hidden');
+          })
+          .catch(error => {
+            // Silently fail if AI is unavailable
+            console.log('AI report generation unavailable:', error.message);
+          });
+      } catch (error) {
+        // Silently fail if function doesn't exist or errors
+        console.log('AI report integration not available:', error.message);
+      }
+    }
   }
 
   function openMailto(subject, tempC) {
@@ -512,6 +623,37 @@
     return emailjs.send(c.serviceId, c.templateId, params, c.publicKey);
   }
 
+  function sendEmailAlert() {
+    const c = getEmailJSConfig();
+    if (!c.serviceId || !c.templateId || !c.publicKey) {
+      console.log('EmailJS not configured for critical alert');
+      return;
+    }
+    if (typeof emailjs === 'undefined') {
+      console.log('EmailJS not loaded for critical alert');
+      return;
+    }
+    
+    const temperature = useFahrenheit ? cToF(currentTempC).toFixed(1) + '°F' : currentTempC.toFixed(1) + '°C';
+    
+    const params = {
+      alert_level: "CRITICAL",
+      temperature: temperature,
+      timestamp: new Date().toLocaleString(),
+      message: "Pipe temperature has remained above the safe threshold for more than 20 seconds."
+    };
+    
+    emailjs.send(c.serviceId, c.templateId, params, c.publicKey)
+      .then(() => {
+        console.log("Critical alert email sent after 20 seconds");
+        showToast('Critical alert email sent', 'success');
+      })
+      .catch(err => {
+        console.error("EmailJS critical alert error:", err);
+        showToast('Failed to send critical alert email', 'error');
+      });
+  }
+
   function formatTicketId(t) {
     const seq = String(t.id).padStart(3, '0');
     return 'TCK-' + seq;
@@ -560,6 +702,10 @@
     
     tickets.push(ticket);
     updateTicketsUI();
+    
+    // Create corresponding workflow ticket
+    createWorkflowTicket(ticket);
+    
     if (isAuto) showToast('Maintenance ticket created automatically after 90s critical.', 'success');
   }
 
@@ -629,20 +775,420 @@
     });
   }
 
+  // Workflow System Functions
+  function createWorkflowTicket(ticket) {
+    const workflowTicket = {
+      id: workflowIdCounter++,
+      ticketId: ticket.id,
+      pipeId: ticket.pipeId,
+      status: 'open', // open -> resolved -> closed
+      technician: assignTechnician(),
+      parts: assignRequiredParts(ticket.severity),
+      createdAt: ticket.createdAt,
+      resolvedAt: null,
+      closedAt: null
+    };
+    
+    workflowTickets.push(workflowTicket);
+    updateWorkflowUI();
+    return workflowTicket;
+  }
+
+  function assignTechnician() {
+    // Simple round-robin assignment with some randomness
+    const availableTechs = technicians.filter(() => Math.random() > 0.2); // 80% availability
+    return availableTechs.length > 0 
+      ? availableTechs[Math.floor(Math.random() * availableTechs.length)]
+      : technicians[Math.floor(Math.random() * technicians.length)];
+  }
+
+  function assignRequiredParts(severity) {
+    const requiredParts = [];
+    
+    if (severity === 'critical') {
+      // Critical issues need more parts
+      const criticalParts = ['Cooling valve', 'Pump seal', 'Pressure gasket'];
+      requiredParts.push(...criticalParts.filter(part => partsInventory[part]?.available));
+      
+      // Sometimes need temperature sensor
+      if (Math.random() > 0.5) {
+        requiredParts.push('Temperature sensor');
+      }
+    } else {
+      // Less severe issues need fewer parts
+      const basicParts = ['Pump seal', 'Pressure gasket'];
+      requiredParts.push(...basicParts.filter(part => partsInventory[part]?.available));
+    }
+    
+    return requiredParts;
+  }
+
+  function updateWorkflowStatus(workflowId, newStatus) {
+    const workflow = workflowTickets.find(w => w.id === workflowId);
+    if (!workflow) return;
+    
+    const oldStatus = workflow.status;
+    workflow.status = newStatus;
+    
+    if (newStatus === 'resolved' && oldStatus !== 'resolved') {
+      workflow.resolvedAt = Date.now();
+      showToast('Ticket marked as resolved', 'success');
+    } else if (newStatus === 'closed' && oldStatus !== 'closed') {
+      workflow.closedAt = Date.now();
+      showToast('Ticket closed successfully', 'success');
+    }
+    
+    updateWorkflowUI();
+  }
+
+  // Communications Hub Functions
+  function addCommunicationLog(source, message) {
+    const timestamp = new Date().toLocaleTimeString('en-US', { 
+      hour: '2-digit', 
+      minute: '2-digit', 
+      second: '2-digit', 
+      hour12: true 
+    });
+    
+    communicationsLog.push({
+      timestamp: timestamp,
+      source: source,
+      message: message
+    });
+    
+    updateCommunicationLogUI();
+  }
+
+  function updateSystemStatus(system, status) {
+    systemStates[system] = status;
+    
+    const statusEl = document.getElementById(system + 'Status');
+    if (statusEl) {
+      statusEl.textContent = status;
+    }
+  }
+
+  function triggerCriticalAlert() {
+    // Simulate critical temperature alert
+    const pipeId = selectedPipeId;
+    const temperature = currentTempC + (Math.random() * 20 + 10); // Simulate critical temp
+    const severity = 'CRITICAL';
+    const threshold = 95;
+    
+    currentAlert = {
+      pipeId: pipeId,
+      temperature: temperature,
+      severity: severity,
+      threshold: threshold,
+      timestamp: new Date()
+    };
+    
+    // Update alert display
+    updateAlertDisplay();
+    
+    // Trigger monitoring system alert
+    addCommunicationLog('MONITOR', `Pipe ${pipeId} temperature exceeded threshold.`);
+    
+    // Trigger AI analysis
+    setTimeout(() => {
+      updateSystemStatus('ai', 'Analyzing...');
+      addCommunicationLog('AI BRIDGE', 'Severity assessed as CRITICAL. Creating maintenance ticket.');
+      
+      // AI decision making
+      setTimeout(() => {
+        const shouldCreateTicket = severity === 'CRITICAL';
+        
+        if (shouldCreateTicket) {
+          updateSystemStatus('maintenance', 'Creating ticket...');
+          addCommunicationLog('MAINT SYS', 'Ticket created. Parts reserved.');
+          
+          // Create maintenance ticket
+          const ticket = {
+            id: ticketIdCounter++,
+            pipeId: pipeId,
+            temperature: temperature,
+            riskScore: failureProbability(temperature, 2, 85, 70), // Simulated values
+            severity: severity,
+            createdAt: Date.now(),
+            type: 'auto',
+            status: 'open',
+            description: `CRITICAL: Temperature has exceeded safe operating range. Current: ${temperature.toFixed(1)}°C`
+          };
+          
+          tickets.push(ticket);
+          updateTicketsUI();
+          createWorkflowTicket(ticket);
+          
+          // Trigger technician dispatch
+          setTimeout(() => {
+            updateSystemStatus('maintenance', 'Dispatching technician...');
+            addCommunicationLog('AI BRIDGE', 'Dispatching technician.');
+            
+            setTimeout(() => {
+              updateSystemStatus('maintenance', 'Technician dispatched');
+              addCommunicationLog('MAINT SYS', 'Technician assigned to ticket.');
+              
+              // Update workflow status
+              const workflow = workflowTickets.find(w => w.ticketId === ticket.id);
+              if (workflow) {
+                updateWorkflowStatus(workflow.id, 'resolved');
+              }
+            }, 2000);
+          }, 1500);
+        }
+      }, 1000);
+    }, 500);
+  }
+
+  function dispatchTechnician() {
+    if (workflowTickets.length === 0) {
+      showToast('No active tickets to dispatch technician', 'warning');
+      return;
+    }
+    
+    const openWorkflow = workflowTickets.find(w => w.status === 'open');
+    if (!openWorkflow) {
+      showToast('No open tickets requiring technician dispatch', 'warning');
+      return;
+    }
+    
+    updateSystemStatus('maintenance', 'Dispatching technician...');
+    addCommunicationLog('MAINT SYS', 'Manual technician dispatch initiated.');
+    
+    setTimeout(() => {
+      updateSystemStatus('maintenance', 'Technician dispatched');
+      addCommunicationLog('MAINT SYS', 'Technician manually assigned to active ticket.');
+      
+      const workflow = workflowTickets.find(w => w.status === 'open');
+      if (workflow) {
+        updateWorkflowStatus(workflow.id, 'resolved');
+      }
+    }, 1000);
+  }
+
+  function markTicketResolved() {
+    const openWorkflow = workflowTickets.find(w => w.status === 'open');
+    if (!openWorkflow) {
+      showToast('No open tickets to mark as resolved', 'warning');
+      return;
+    }
+    
+    updateWorkflowStatus(openWorkflow.id, 'resolved');
+    addCommunicationLog('MAINT SYS', `Ticket ${openWorkflow.ticketId} marked as resolved.`);
+    showToast('Ticket marked as resolved', 'success');
+  }
+
+  function resetCommunicationsSystem() {
+    // Clear all states
+    currentAlert = null;
+    communicationsLog = [];
+    systemStates = {
+      monitoring: 'Active',
+      ai: 'Ready',
+      maintenance: 'Idle',
+      inventory: 'Available'
+    };
+    
+    // Reset UI
+    updateAlertDisplay();
+    updateCommunicationLogUI();
+    updateSystemStatus('monitoring', 'Active');
+    updateSystemStatus('ai', 'Ready');
+    updateSystemStatus('maintenance', 'Idle');
+    updateSystemStatus('inventory', 'Available');
+    
+    showToast('Communications system reset', 'success');
+  }
+
+  function updateAlertDisplay() {
+    const alertDetailsEl = document.getElementById('currentAlertDetails');
+    const pipeIdEl = document.getElementById('alertPipeId');
+    const tempEl = document.getElementById('alertTemperature');
+    const severityEl = document.getElementById('alertSeverity');
+    
+    if (currentAlert) {
+      if (alertDetailsEl) alertDetailsEl.classList.remove('hidden');
+      if (pipeIdEl) pipeIdEl.textContent = currentAlert.pipeId;
+      if (tempEl) tempEl.textContent = currentAlert.temperature.toFixed(1) + '°C';
+      if (severityEl) severityEl.textContent = currentAlert.severity;
+    } else {
+      if (alertDetailsEl) alertDetailsEl.classList.add('hidden');
+      if (pipeIdEl) pipeIdEl.textContent = '—';
+      if (tempEl) tempEl.textContent = '—';
+      if (severityEl) severityEl.textContent = '—';
+    }
+  }
+
+  function updateCommunicationLogUI() {
+    const logEl = document.getElementById('communicationLog');
+    if (!logEl) return;
+    
+    if (communicationsLog.length === 0) {
+      logEl.innerHTML = '<div class="text-[var(--figma-text-muted)] italic">System initialized. Waiting for critical temperature events...</div>';
+      return;
+    }
+    
+    logEl.innerHTML = communicationsLog.slice().reverse().map(entry => {
+      const sourceColors = {
+        'MONITOR': 'var(--figma-green)',
+        'AI BRIDGE': 'var(--figma-orange)',
+        'MAINT SYS': 'var(--figma-blue-accent)',
+        'AI BRIDGE': 'var(--figma-orange)'
+      };
+      
+      return `<div class="flex items-start gap-2 pb-2 border-b border-[var(--figma-border)]/30 last:border-b-0">
+        <div class="flex-shrink-0 w-20 text-right">
+          <div class="text-xs text-[var(--figma-text-muted)]">${entry.timestamp}</div>
+          <div class="text-sm font-medium" style="color: ${sourceColors[entry.source]}">${entry.source}</div>
+        </div>
+        <div class="flex-1 text-[var(--figma-text)]">${entry.message}</div>
+      </div>`;
+    }).join('');
+  }
+
+  function updateWorkflowUI() {
+    const listEl = document.getElementById('workflowList');
+    const emptyEl = document.getElementById('workflowEmpty');
+    
+    if (workflowTickets.length === 0) {
+      if (listEl) listEl.innerHTML = '';
+      if (emptyEl) emptyEl.classList.remove('hidden');
+      return;
+    }
+    
+    if (emptyEl) emptyEl.classList.add('hidden');
+    if (!listEl) return;
+    
+    listEl.innerHTML = workflowTickets.slice().reverse().map(function(workflow) {
+      const ticket = tickets.find(t => t.id === workflow.ticketId);
+      const timeStr = new Date(workflow.createdAt).toLocaleString('en-US', { 
+        month: 'short', 
+        day: 'numeric', 
+        hour: '2-digit', 
+        minute: '2-digit', 
+        hour12: true 
+      });
+      
+      const statusColors = {
+        open: 'var(--figma-orange)',
+        resolved: 'var(--figma-blue-accent)', 
+        closed: 'var(--figma-green)'
+      };
+      
+      const statusBgColors = {
+        open: 'bg-[var(--figma-orange)]/20',
+        resolved: 'bg-[var(--figma-blue-accent)]/20',
+        closed: 'bg-[var(--figma-green)]/20'
+      };
+      
+      const workflowSteps = [
+        { id: 'open', label: 'Open', completed: workflow.status === 'resolved' || workflow.status === 'closed' },
+        { id: 'resolved', label: 'Resolved', completed: workflow.status === 'closed' },
+        { id: 'closed', label: 'Closed', completed: workflow.status === 'closed' }
+      ];
+      
+      const workflowProgress = workflowSteps.map((step, index) => {
+        const isCurrent = step.id === workflow.status;
+        const isCompleted = step.completed;
+        const stepClass = isCurrent 
+          ? `border-[${statusColors[workflow.status]}] text-[${statusColors[workflow.status]}] bg-[${statusColors[workflow.status]}]/10`
+          : isCompleted 
+          ? 'border-[var(--figma-green)] text-[var(--figma-green)] bg-[var(--figma-green)]/10'
+          : 'border-[var(--figma-border)] text-[var(--figma-text-muted)] bg-[var(--figma-border)]/10';
+        
+        return `<div class="flex-1 text-center px-2 py-1 rounded border ${stepClass} text-xs font-medium">
+          ${step.label}
+        </div>`;
+      }).join('<div class="text-[var(--figma-text-muted)] mx-1">→</div>');
+      
+      const partsList = workflow.parts.length > 0 
+        ? workflow.parts.map(part => `• ${part}`).join('<br>')
+        : 'No parts required';
+      
+      return `<div class="bg-[var(--figma-border)]/50 border border-[var(--figma-border)] rounded-[var(--figma-radius)] p-4" data-workflow-id="${workflow.id}">
+        <div class="flex items-center justify-between mb-3">
+          <div class="flex items-center gap-2">
+            <span class="text-[var(--figma-text)] font-medium">Ticket ID: TKT-${String(workflow.ticketId).padStart(3, '0')}</span>
+            <span class="text-xs px-2 py-1 rounded ${statusBgColors[workflow.status]} text-[${statusColors[workflow.status]}]">${workflow.status.toUpperCase()}</span>
+          </div>
+          <div class="text-xs text-[var(--figma-text-muted)]">${timeStr}</div>
+        </div>
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3 text-sm">
+          <div>
+            <div class="text-[var(--figma-text-muted)] text-xs mb-1">Pipe</div>
+            <div class="text-[var(--figma-text)] font-medium">${workflow.pipeId}</div>
+          </div>
+          <div>
+            <div class="text-[var(--figma-text-muted)] text-xs mb-1">Technician</div>
+            <div class="text-[var(--figma-text)] font-medium">${workflow.technician}</div>
+          </div>
+        </div>
+        
+        <div class="mb-3">
+          <div class="text-[var(--figma-text-muted)] text-xs mb-1">Parts Reserved</div>
+          <div class="text-[var(--figma-text)] text-sm">${partsList}</div>
+        </div>
+        
+        <div class="mb-3">
+          <div class="text-[var(--figma-text-muted)] text-xs mb-2">Workflow Progress</div>
+          <div class="flex items-center">
+            ${workflowProgress}
+          </div>
+        </div>
+        
+        <div class="flex items-center gap-2">
+          ${workflow.status === 'open' ? `<button class="workflow-resolve px-3 py-1.5 rounded-[var(--figma-radius)] text-xs bg-[var(--figma-blue-accent)] hover:opacity-90 text-white flex items-center gap-1">
+            <i class="fas fa-check"></i> Mark Resolved
+          </button>` : ''}
+          ${workflow.status === 'resolved' ? `<button class="workflow-close px-3 py-1.5 rounded-[var(--figma-radius)] text-xs bg-[var(--figma-green)] hover:opacity-90 text-white flex items-center gap-1">
+            <i class="fas fa-times"></i> Close Ticket
+          </button>` : ''}
+        </div>
+      </div>`;
+    }).join('');
+    
+    // Add event listeners
+    listEl.querySelectorAll('.workflow-resolve').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        const card = btn.closest('[data-workflow-id]');
+        const id = parseInt(card.getAttribute('data-workflow-id'), 10);
+        updateWorkflowStatus(id, 'resolved');
+      });
+    });
+    
+    listEl.querySelectorAll('.workflow-close').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        const card = btn.closest('[data-workflow-id]');
+        const id = parseInt(card.getAttribute('data-workflow-id'), 10);
+        updateWorkflowStatus(id, 'closed');
+      });
+    });
+  }
+
   function startCriticalTimer() {
     if (criticalTimerId) return;
     criticalStartTime = Date.now();
+    emailSentForCurrentCriticalEvent = false;
     criticalTimerId = setInterval(function () {
       if (getStatus(currentTempC) !== 'critical' || paused) {
         clearInterval(criticalTimerId);
         criticalTimerId = null;
         criticalStartTime = null;
+        emailSentForCurrentCriticalEvent = false;
         updateCriticalDurationUI(0, false);
         document.getElementById('criticalDurationBanner').classList.add('hidden');
         return;
       }
       const elapsed = Math.floor((Date.now() - criticalStartTime) / 1000);
       updateCriticalDurationUI(elapsed, true);
+      
+      // Send email after 20 seconds in critical condition
+      if (elapsed >= 20 && !emailSentForCurrentCriticalEvent && emailEnabled && emailEnabled.checked) {
+        sendEmailAlert();
+        emailSentForCurrentCriticalEvent = true;
+      }
+      
       if (elapsed >= CRITICAL_AUTO_TICKET_SEC) {
         createTicket(true, selectedPipeId);
         criticalStartTime = Date.now();
@@ -941,6 +1487,20 @@
   }
   
   initChart();
+  
+  // Communications Hub Event Listeners
+  document.getElementById('triggerAlertBtn').addEventListener('click', triggerCriticalAlert);
+  document.getElementById('dispatchTechnicianBtn').addEventListener('click', dispatchTechnician);
+  document.getElementById('markResolvedBtn').addEventListener('click', markTicketResolved);
+  document.getElementById('resetSystemBtn').addEventListener('click', resetCommunicationsSystem);
+
+  // Initialize communications hub UI
+  updateSystemStatus('monitoring', 'Active');
+  updateSystemStatus('ai', 'Ready');
+  updateSystemStatus('maintenance', 'Idle');
+  updateSystemStatus('inventory', 'Available');
+  updateCommunicationLogUI();
+
   updateDisplay();
   updateChart();
   updateCriticalDurationUI(0, false);

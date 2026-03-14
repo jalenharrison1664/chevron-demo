@@ -23,25 +23,25 @@ export function AlertPanel({ severity, temperature, unit }: AlertPanelProps) {
       icon: CheckCircle,
       title: 'System Normal',
       message: 'Pipe temperature is within safe operating range.',
-      bgColor: 'bg-green-500/10',
-      borderColor: 'border-green-500/50',
-      textColor: 'text-green-500',
+      bgColor: 'bg-[var(--figma-green)]/10',
+      borderColor: 'border-[var(--figma-green)]/50',
+      textColor: 'text-[var(--figma-green)]',
     },
     warning: {
       icon: AlertTriangle,
       title: 'Warning: Elevated Temperature',
       message: 'Pipe temperature is approaching critical levels. Monitor closely and prepare for intervention.',
-      bgColor: 'bg-amber-500/10',
-      borderColor: 'border-amber-500/50',
-      textColor: 'text-amber-500',
+      bgColor: 'bg-[var(--figma-orange)]/10',
+      borderColor: 'border-[var(--figma-orange)]/50',
+      textColor: 'text-[var(--figma-orange)]',
     },
     critical: {
       icon: AlertCircle,
       title: 'CRITICAL: High Temperature Alert',
       message: 'Pipe temperature has exceeded safe limits! Immediate action required to prevent system damage.',
-      bgColor: 'bg-red-500/10',
-      borderColor: 'border-red-500/50',
-      textColor: 'text-red-500',
+      bgColor: 'bg-[var(--figma-red)]/10',
+      borderColor: 'border-[var(--figma-red)]/50',
+      textColor: 'text-[var(--figma-red)]',
     },
   };
 
@@ -50,14 +50,17 @@ export function AlertPanel({ severity, temperature, unit }: AlertPanelProps) {
 
   return (
     <div className="space-y-4">
-      <h3 className="text-xl text-white">Status Alerts</h3>
+      <h3 className="text-xl text-[var(--figma-text)]">Status Alerts</h3>
       <AnimatePresence mode="wait">
         <motion.div
           key={severity}
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: 20 }}
-          className={`p-6 rounded-xl border-2 ${alert.bgColor} ${alert.borderColor}`}
+          className={`p-6 rounded-xl border-2 ${alert.bgColor} ${alert.borderColor} ${
+            severity === 'critical' ? 'alert-critical' : 
+            severity === 'warning' ? 'alert-warning' : ''
+          }`}
         >
           <div className="flex items-start gap-4">
             <motion.div
@@ -76,18 +79,18 @@ export function AlertPanel({ severity, temperature, unit }: AlertPanelProps) {
               <h4 className={`font-semibold text-lg ${alert.textColor} mb-2`}>
                 {alert.title}
               </h4>
-              <p className="text-gray-300">
+              <p className="text-[var(--figma-text-muted)]">
                 {alert.message}
               </p>
               <div className="mt-4 flex gap-4 text-sm">
                 <div>
-                  <span className="text-gray-400">Current: </span>
+                  <span className="text-[var(--figma-text-muted)]">Current: </span>
                   <span className={`font-mono ${alert.textColor}`}>{displayTemp.toFixed(1)}°{unit}</span>
                 </div>
                 {severity === 'warning' && (
                   <div>
-                    <span className="text-gray-400">Critical at: </span>
-                    <span className="font-mono text-red-500">{criticalThreshold.toFixed(1)}°{unit}</span>
+                    <span className="text-[var(--figma-text-muted)]">Critical at: </span>
+                    <span className="font-mono text-[var(--figma-red)]">{criticalThreshold.toFixed(1)}°{unit}</span>
                   </div>
                 )}
               </div>
@@ -97,17 +100,17 @@ export function AlertPanel({ severity, temperature, unit }: AlertPanelProps) {
       </AnimatePresence>
 
       <div className="grid grid-cols-3 gap-4">
-        <div className="p-4 bg-gray-900 rounded-lg border border-gray-800">
-          <div className="text-sm text-gray-400 mb-1">Safe Range</div>
-          <div className="text-green-500 font-mono">0 - {safeMax}°{unit}</div>
+        <div className="dashboard-card">
+          <div className="text-sm text-[var(--figma-text-muted)] mb-1">Safe Range</div>
+          <div className="text-[var(--figma-green)] font-mono">0 - {safeMax}°{unit}</div>
         </div>
-        <div className="p-4 bg-gray-900 rounded-lg border border-gray-800">
-          <div className="text-sm text-gray-400 mb-1">Warning Range</div>
-          <div className="text-amber-500 font-mono">{warningMin} - {warningMax}°{unit}</div>
+        <div className="dashboard-card">
+          <div className="text-sm text-[var(--figma-text-muted)] mb-1">Warning Range</div>
+          <div className="text-[var(--figma-orange)] font-mono">{warningMin} - {warningMax}°{unit}</div>
         </div>
-        <div className="p-4 bg-gray-900 rounded-lg border border-gray-800">
-          <div className="text-sm text-gray-400 mb-1">Critical Range</div>
-          <div className="text-red-500 font-mono">{criticalMin}°{unit}+</div>
+        <div className="dashboard-card">
+          <div className="text-sm text-[var(--figma-text-muted)] mb-1">Critical Range</div>
+          <div className="text-[var(--figma-red)] font-mono">{criticalMin}°{unit}+</div>
         </div>
       </div>
     </div>

@@ -68,26 +68,27 @@
 <body class="min-h-screen">
 
   <div class="max-w-6xl mx-auto p-6 space-y-6" style="--tw-space-y-reverse: 0;">
-    <!-- Chevron branding -->
-    <div class="flex justify-center pt-6">
-      <img src="assets/chevron-logo.png" alt="Chevron" class="h-14 w-auto object-contain chevron-logo" />
-    </div>
     <!-- Header -->
     <div class="flex items-center justify-between flex-wrap gap-4 mb-6">
-      <div>
-        <h1 class="text-2xl font-bold flex items-center gap-2 text-[var(--figma-text)] leading-tight">
-          <i class="fas fa-wave-square text-[var(--figma-blue-accent)]"></i>
-          Pipe Temperature Monitor
-        </h1>
-        <div class="flex items-center gap-4 mt-2">
-          <div id="systemStatus" class="flex items-center gap-2 text-sm">
-            <span class="w-2 h-2 rounded-full bg-[var(--figma-green)]" id="statusDot"></span>
-            <span id="statusText" class="text-[var(--figma-text)] font-medium">System Status: CRITICAL</span>
+      <div class="flex items-center gap-3">
+        <img src="assets/chevron-logo.png" alt="Chevron" class="h-20 w-auto object-contain chevron-logo" />
+        <div>
+          <h1 class="text-2xl font-bold text-[var(--figma-text)] leading-tight">
+            Pipe Temperature Monitor
+          </h1>
+          <div class="text-[var(--figma-text-muted)] text-sm mt-1">
+            Real-time temperature monitoring and alert system
           </div>
-          <button id="pauseBtn" class="px-4 py-2 rounded-[var(--figma-radius)] bg-[var(--figma-red)] hover:opacity-90 border border-[var(--figma-red)] text-white transition text-sm font-medium">
-            Pause Monitoring
-          </button>
         </div>
+      </div>
+      <div class="flex items-center gap-4">
+        <div id="systemStatus" class="flex items-center gap-2 text-sm">
+          <span class="w-2 h-2 rounded-full bg-[var(--figma-green)]" id="statusDot"></span>
+          <span id="statusText" class="text-[var(--figma-text)] font-medium">System Status: CRITICAL</span>
+        </div>
+        <button id="pauseBtn" class="px-4 py-2 rounded-[var(--figma-radius)] bg-[var(--figma-red)] hover:opacity-90 border border-[var(--figma-red)] text-white transition text-sm font-medium">
+          Pause Monitoring
+        </button>
       </div>
       <div id="autoTicketNotification" class="hidden bg-[var(--figma-orange)]/20 border border-[var(--figma-orange)] rounded-[var(--figma-radius)] px-4 py-2 text-[var(--figma-text)] text-sm">
         <div class="font-medium flex items-center gap-2"><i class="fas fa-wrench"></i> Auto-Generated Maintenance Ticket</div>
@@ -261,20 +262,44 @@
       </div>
     </div>
 
-    <!-- Maintenance Tickets -->
+    <!-- Unified Maintenance System -->
     <div class="dashboard-card">
       <div class="flex items-center justify-between flex-wrap gap-4 mb-4">
         <div>
           <h2 class="text-lg font-semibold flex items-center gap-2 text-[var(--figma-text)]">
-            <i class="fas fa-wrench text-[var(--figma-blue-accent)]"></i>
-            Maintenance Tickets
+            <i class="fas fa-cogs text-[var(--figma-blue-accent)]"></i>
+            Unified Maintenance System
           </h2>
-          <p class="text-[var(--figma-text-muted)] text-sm mt-1">Manual and auto-generated service requests</p>
+          <p class="text-[var(--figma-text-muted)] text-sm mt-1">Integrated ticket management, workflow tracking, and communications</p>
         </div>
-        <button id="createTicketBtn" class="flex items-center gap-2 px-4 py-2.5 bg-[#3B82F6] hover:opacity-90 text-white rounded-[var(--figma-radius)] font-medium text-sm transition">
-          <i class="fas fa-wrench"></i> Create Ticket
-        </button>
+        <div class="flex items-center gap-3">
+          <button id="createTicketBtn" class="flex items-center gap-2 px-4 py-2.5 bg-[#3B82F6] hover:opacity-90 text-white rounded-[var(--figma-radius)] font-medium text-sm transition">
+            <i class="fas fa-wrench"></i> Create Ticket
+          </button>
+        </div>
       </div>
+      
+      <!-- System Status Overview -->
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+        <div class="bg-[var(--figma-border)]/50 border border-[var(--figma-border)] rounded-[var(--figma-radius)] p-3">
+          <div class="text-[var(--figma-text-muted)] text-xs mb-1">Monitoring System</div>
+          <div id="monitoringStatus" class="text-[var(--figma-text)] font-medium">Active</div>
+        </div>
+        <div class="bg-[var(--figma-border)]/50 border border-[var(--figma-border)] rounded-[var(--figma-radius)] p-3">
+          <div class="text-[var(--figma-text-muted)] text-xs mb-1">AI Bridge</div>
+          <div id="aiBridgeStatus" class="text-[var(--figma-text)] font-medium">Ready</div>
+        </div>
+        <div class="bg-[var(--figma-border)]/50 border border-[var(--figma-border)] rounded-[var(--figma-radius)] p-3">
+          <div class="text-[var(--figma-text-muted)] text-xs mb-1">Maintenance System</div>
+          <div id="maintenanceStatus" class="text-[var(--figma-text)] font-medium">Idle</div>
+        </div>
+        <div class="bg-[var(--figma-border)]/50 border border-[var(--figma-border)] rounded-[var(--figma-radius)] p-3">
+          <div class="text-[var(--figma-text-muted)] text-xs mb-1">Inventory System</div>
+          <div id="inventoryStatus" class="text-[var(--figma-text)] font-medium">Available</div>
+        </div>
+      </div>
+      
+      <!-- Critical Duration Panel -->
       <div id="criticalDurationPanel" class="rounded-[var(--figma-radius)] p-4 mb-4 bg-[var(--figma-red)]/20 border border-[var(--figma-red)] flex flex-wrap items-center justify-between gap-4">
         <div class="flex items-center gap-3">
           <i class="fas fa-clock text-white text-xl"></i>
@@ -295,6 +320,8 @@
           </div>
         </div>
       </div>
+      
+      <!-- Ticket Statistics -->
       <div class="grid grid-cols-3 gap-4 mb-4">
         <div class="bg-[var(--figma-border)]/50 border border-[var(--figma-border)] rounded-[var(--figma-radius)] p-3">
           <div class="text-[var(--figma-text-muted)] text-sm">Total Tickets</div>
@@ -309,11 +336,81 @@
           <div id="statAutoTickets" class="text-xl font-bold text-[var(--figma-red)]">0</div>
         </div>
       </div>
-      <div id="ticketsList" class="space-y-3"></div>
-      <div id="ticketsEmpty" class="text-center py-12 text-[var(--figma-text-muted)]">
-        <i class="fas fa-wrench text-4xl mb-3 opacity-50"></i>
-        <div class="font-medium text-[var(--figma-text)]">No maintenance tickets yet</div>
-        <div class="text-sm mt-1">Tickets will be created manually or automatically when critical</div>
+      
+      <!-- Scrollable Content Container -->
+      <div class="max-h-[500px] overflow-y-auto pr-2 space-y-4">
+        <!-- Current Alert Details -->
+        <div id="currentAlertDetails" class="bg-[var(--figma-orange)]/20 border border-[var(--figma-orange)] rounded-[var(--figma-radius)] p-4 hidden">
+          <div class="text-[var(--figma-text)] font-medium mb-2">Current Critical Alert</div>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+            <div>
+              <div class="text-[var(--figma-text-muted)] text-xs mb-1">Pipe ID</div>
+              <div id="alertPipeId" class="text-[var(--figma-text)] font-medium">—</div>
+            </div>
+            <div>
+              <div class="text-[var(--figma-text-muted)] text-xs mb-1">Temperature</div>
+              <div id="alertTemperature" class="text-[var(--figma-text)] font-medium">—</div>
+            </div>
+            <div>
+              <div class="text-[var(--figma-text-muted)] text-xs mb-1">Severity</div>
+              <div id="alertSeverity" class="text-[var(--figma-red)] font-medium">—</div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Tickets List -->
+        <div>
+          <div class="text-[var(--figma-text)] font-medium mb-3">Active Maintenance Tickets</div>
+          <div id="ticketsList" class="space-y-3"></div>
+          <div id="ticketsEmpty" class="text-center py-8 text-[var(--figma-text-muted)]">
+            <i class="fas fa-wrench text-3xl mb-2 opacity-50"></i>
+            <div class="font-medium text-[var(--figma-text)]">No maintenance tickets yet</div>
+            <div class="text-sm mt-1">Tickets will be created manually or automatically when critical</div>
+          </div>
+        </div>
+        
+        <!-- Workflow Progress -->
+        <div>
+          <div class="text-[var(--figma-text)] font-medium mb-3">Ticket Workflow Progress</div>
+          <div id="workflowList" class="space-y-4"></div>
+          <div id="workflowEmpty" class="text-center py-8 text-[var(--figma-text-muted)]">
+            <i class="fas fa-tasks text-3xl mb-2 opacity-50"></i>
+            <div class="font-medium text-[var(--figma-text)]">No workflow tickets yet</div>
+            <div class="text-sm mt-1">Workflow tracking will appear when tickets are created</div>
+          </div>
+        </div>
+        
+        <!-- System Communication Log -->
+        <div>
+          <div class="text-[var(--figma-text)] font-medium mb-3">System Communication Log</div>
+          <div class="bg-[var(--figma-border)]/30 border border-[var(--figma-border)] rounded-[var(--figma-radius)] p-3">
+            <div id="communicationLog" class="space-y-2 text-sm max-h-64 overflow-y-auto">
+              <div class="text-[var(--figma-text-muted)] italic">System initialized. Waiting for critical temperature events...</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Control Actions -->
+      <div class="flex items-center justify-between gap-3 mt-4 pt-4 border-t border-[var(--figma-border)]">
+        <div class="flex items-center gap-2">
+          <button id="triggerAlertBtn" class="px-4 py-2 rounded-[var(--figma-radius)] bg-[var(--figma-orange)] hover:opacity-90 text-white text-sm font-medium flex items-center gap-2">
+            <i class="fas fa-exclamation-triangle"></i>
+            Trigger Critical Alert
+          </button>
+          <button id="dispatchTechnicianBtn" class="px-4 py-2 rounded-[var(--figma-radius)] bg-[var(--figma-blue-accent)] hover:opacity-90 text-white text-sm font-medium flex items-center gap-2">
+            <i class="fas fa-user-tie"></i>
+            Dispatch Technician
+          </button>
+          <button id="markResolvedBtn" class="px-4 py-2 rounded-[var(--figma-radius)] bg-[var(--figma-green)] hover:opacity-90 text-white text-sm font-medium flex items-center gap-2">
+            <i class="fas fa-check"></i>
+            Mark Resolved
+          </button>
+        </div>
+        <button id="resetSystemBtn" class="px-4 py-2 rounded-[var(--figma-radius)] bg-[var(--figma-border)] hover:bg-[var(--figma-text-muted)]/20 text-[var(--figma-text)] text-sm font-medium flex items-center gap-2">
+          <i class="fas fa-redo"></i>
+          Reset System
+        </button>
       </div>
     </div>
 
@@ -340,7 +437,7 @@
           <div id="overheatTime" class="text-xl font-bold text-[var(--figma-text)]">—</div>
         </div>
       </div>
-      <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+      <div class="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-4">
         <div class="bg-[var(--figma-border)]/50 border border-[var(--figma-border)] rounded-[var(--figma-radius)] p-3">
           <div class="text-[var(--figma-text-muted)] text-xs mb-1 flex items-center gap-1"><i class="fas fa-chart-line text-[var(--figma-blue-accent)]"></i> Temp Rate</div>
           <div id="overheatTempRate" class="text-[var(--figma-text)] font-medium">+0.0°C/min</div>
@@ -357,27 +454,25 @@
           <div class="text-[var(--figma-text-muted)] text-xs mb-1 flex items-center gap-1"><i class="fas fa-thermometer-half text-[var(--figma-blue-accent)]"></i> Current Temp</div>
           <div id="overheatCurrentTemp" class="text-[var(--figma-text)] font-medium">0°C</div>
         </div>
-      </div>
-      <div class="grid grid-cols-1 lg:grid-cols-5 gap-3 mb-4">
-        <div class="lg:col-span-4">
-          <div id="overheatAlertBox" class="hidden rounded-[var(--figma-radius)] p-3 bg-[var(--figma-orange)]/20 border border-[var(--figma-orange)] flex items-start gap-2">
-            <i class="fas fa-exclamation-triangle text-[var(--figma-orange)] mt-0.5"></i>
-            <p class="text-[var(--figma-text)] text-sm" id="overheatAlertText">Elevated risk detected. Monitor closely and prepare for potential intervention.</p>
-          </div>
-        </div>
         <div class="bg-[var(--figma-border)]/50 border border-[var(--figma-border)] rounded-[var(--figma-radius)] p-3">
           <div class="text-[var(--figma-text-muted)] text-xs mb-1 flex items-center gap-1"><i class="fas fa-water text-[var(--figma-blue-accent)]"></i> Flow Rate</div>
           <div id="flowRate" class="text-[var(--figma-text)] font-medium">55 GPM</div>
         </div>
       </div>
+      <div id="overheatAlertBox" class="hidden rounded-[var(--figma-radius)] p-3 bg-[var(--figma-orange)]/20 border border-[var(--figma-orange)] flex items-start gap-2">
+        <i class="fas fa-exclamation-triangle text-[var(--figma-orange)] mt-0.5"></i>
+        <p class="text-[var(--figma-text)] text-sm" id="overheatAlertText">Elevated risk detected. Monitor closely and prepare for potential intervention.</p>
+      </div>
       <div class="bg-[var(--figma-border)]/30 border border-[var(--figma-border)] rounded-[var(--figma-radius)] p-4">
         <div class="text-[var(--figma-text)] font-medium mb-2 flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-[var(--figma-orange)]"></span> System Response</div>
+        <div id="ai-explanation" class="text-sm text-[var(--figma-text)] mb-3"></div>
         <ul class="text-sm text-[var(--figma-text-muted)] space-y-1 list-none pl-0">
           <li class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full bg-[var(--figma-orange)] flex-shrink-0"></span> Reduce pump load to 60%</li>
           <li class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full bg-[var(--figma-orange)] flex-shrink-0"></span> Increase monitoring frequency</li>
           <li class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full bg-[var(--figma-orange)] flex-shrink-0"></span> Prepare cooling system</li>
           <li class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full bg-[var(--figma-orange)] flex-shrink-0"></span> Alert operations team</li>
         </ul>
+        <div id="ai-report" class="mt-3 text-sm text-[var(--figma-text)] hidden"></div>
       </div>
     </div>
 
