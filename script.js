@@ -2,8 +2,10 @@
   const SAFE_MAX = 75;
   const WARNING_MAX = 95;
   const GAUGE_MAX = 150;
+  const CRITICAL_TEMP = 120;
   const HISTORY_LENGTH = 100;
-  const UPDATE_MS = 2000;
+  const UPDATE_MS = 10000; // 10 seconds
+  const TREND_READINGS = 30;
 
   let tempHistory = [];
   let currentTempC = 55;
@@ -13,7 +15,8 @@
   let autoExportTimer = null;
   let emailSentWarning = false;
   let emailSentCritical = false;
-  let lastStatus = 'normal';
+  let pumpLoad = 45;
+  let pressure = 50;
   let chart = null;
 
   const tempDisplay = document.getElementById('tempDisplay');
@@ -35,8 +38,47 @@
   const exportBtn = document.getElementById('exportBtn');
   const emailEnabled = document.getElementById('emailEnabled');
   const testEmailBtn = document.getElementById('testEmailBtn');
+  const rangeSafe = document.getElementById('rangeSafe');
+  const rangeWarning = document.getElementById('rangeWarning');
+  const rangeCritical = document.getElementById('rangeCritical');
+
+  const CRITICAL_AUTO_TICKET_SEC = 90;
+  const PUMP_TEMP_LOW = 20;
+  const PUMP_TEMP_HIGH = 120;
+  const PUMP_LOAD_LOW = 30;
+  const PUMP_LOAD_HIGH = 95;
+  const PUMP_VARIANCE = 0.05;
+  let criticalStartTime = null;
+  let criticalTimerId = null;
+  let tickets = [];
+  let ticketIdCounter = 1;
 
   function cToF(c) { return (c * 9 / 5) + 32; }
+
+  function computePumpLoadFromTemp(tempC) {
+    var t = Math.max(PUMP_TEMP_LOW, Math.min(PUMP_TEMP_HIGH, tempC));
+    var linear = PUMP_LOAD_LOW + (t - PUMP_TEMP_LOW) * (PUMP_LOAD_HIGH - PUMP_LOAD_LOW) / (PUMP_TEMP_HIGH - PUMP_TEMP_LOW);
+    var variance = (Math.random() - 0.5) * 2 * PUMP_VARIANCE * 100;
+    return Math.max(20, Math.min(100, linear + variance));
+  }
+
+  function computePressureFromTempAndRate(tempC, tempRatePerMin) {
+    var base = 30 + (tempC / 150) * 70;
+    var rateBonus = Math.max(0, tempRatePerMin) * 2.5;
+    var variance = (Math.random() - 0.5) * 4;
+    return Math.max(30, Math.min(150, base + rateBonus + variance));
+  }
+
+  function showToast(message, type) {
+    type = type || 'info';
+    const container = document.getElementById('toastContainer');
+    if (!container) return;
+    const el = document.createElement('div');
+    el.className = 'toast ' + type;
+    el.textContent = message;
+    container.appendChild(el);
+    setTimeout(function () { el.remove(); }, 4000);
+  }
   function getStatus(temp) {
     if (temp <= SAFE_MAX) return 'normal';
     if (temp <= WARNING_MAX) return 'warning';
@@ -46,17 +88,80 @@
     return prev + (Math.random() - 0.5) * 2 * range;
   }
 
+  function formatTime12h(ts) {
+    const d = new Date(ts);
+    return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+  }
+
+  function getTempRate() {
+    if (!tempHistory || tempHistory.length < 5) return 0;
+    const recent = tempHistory.slice(-5);
+    const t0 = recent[0].t;
+    const t1 = recent[recent.length - 1].t;
+    const minutes = (t1 - t0) / 60000;
+    if (minutes <= 0) return 0;
+    return (recent[recent.length - 1].c - recent[0].c) / minutes;
+  }
+
+  function getTrendRate() {
+    if (!tempHistory || tempHistory.length < 10) return 0;
+    const n = Math.min(TREND_READINGS, tempHistory.length);
+    const slice = tempHistory.slice(-n);
+    const t0 = slice[0].t;
+    const t1 = slice[slice.length - 1].t;
+    const minutes = (t1 - t0) / 60000;
+    if (minutes <= 0) return 0;
+    return (slice[slice.length - 1].c - slice[0].c) / minutes;
+  }
+
+  function getAcceleration() {
+    if (!tempHistory || tempHistory.length < 15) return 0;
+    const mid = Math.floor(tempHistory.length / 2);
+    const firstHalf = tempHistory.slice(0, mid);
+    const secondHalf = tempHistory.slice(mid);
+    if (firstHalf.length < 3 || secondHalf.length < 3) return 0;
+    const t0 = firstHalf[0].t, t1 = firstHalf[firstHalf.length - 1].t;
+    const t2 = secondHalf[0].t, t3 = secondHalf[secondHalf.length - 1].t;
+    const min1 = (t1 - t0) / 60000, min2 = (t3 - t2) / 60000;
+    if (min1 <= 0 || min2 <= 0) return 0;
+    const rate1 = (firstHalf[firstHalf.length - 1].c - firstHalf[0].c) / min1;
+    const rate2 = (secondHalf[secondHalf.length - 1].c - secondHalf[0].c) / min2;
+    const timeBetween = (t2 - t1) / 60000;
+    if (timeBetween <= 0) return 0;
+    return (rate2 - rate1) / timeBetween;
+  }
+
+  function failureProbability(temp, tempRate, pump, press) {
+    const t = Math.min(1, temp / 120);
+    const r = Math.min(1, Math.max(0, tempRate) / 12);
+    const p = Math.min(1, pump / 100);
+    const ps = Math.min(1, press / 150);
+    return Math.min(100, (0.4 * t + 0.3 * r + 0.2 * p + 0.1 * ps) * 100);
+  }
+
+  function timeToCritical(temp, trendRateCPerMin) {
+    if (trendRateCPerMin <= 0 || temp >= CRITICAL_TEMP) return null;
+    const minutes = (CRITICAL_TEMP - temp) / trendRateCPerMin;
+    return Math.max(0, minutes);
+  }
+
   function updateScaleLabels() {
     if (useFahrenheit) {
       scaleMin.textContent = '32°F';
       scaleMid1.textContent = Math.round(cToF(75)) + '°F';
       scaleMid2.textContent = Math.round(cToF(95)) + '°F';
       scaleMax.textContent = Math.round(cToF(GAUGE_MAX)) + '°F';
+      if (rangeSafe) rangeSafe.textContent = 'Safe Range: 0 – 167°F';
+      if (rangeWarning) rangeWarning.textContent = 'Warning Range: 169 – 203°F';
+      if (rangeCritical) rangeCritical.textContent = 'Critical Range: 205°F+';
     } else {
       scaleMin.textContent = '0°C';
       scaleMid1.textContent = '75°C';
       scaleMid2.textContent = '95°C';
       scaleMax.textContent = GAUGE_MAX + '°C';
+      if (rangeSafe) rangeSafe.textContent = 'Safe Range: 0 – 75°C';
+      if (rangeWarning) rangeWarning.textContent = 'Warning Range: 76 – 95°C';
+      if (rangeCritical) rangeCritical.textContent = 'Critical Range: 96°C+';
     }
   }
 
@@ -66,35 +171,51 @@
     const unit = useFahrenheit ? '°F' : '°C';
     tempDisplay.textContent = displayTemp.toFixed(1) + unit;
     tempDisplay.className = 'text-5xl font-bold mb-2 ' +
-      (status === 'normal' ? 'text-green-400' : status === 'warning' ? 'text-amber-400' : 'text-red-400');
+      (status === 'normal' ? 'text-[var(--figma-green)]' : status === 'warning' ? 'text-[var(--figma-orange)]' : 'text-[var(--figma-red)]');
+
+    var pipeIcon = document.getElementById('pipeTempIcon');
+    if (pipeIcon) pipeIcon.className = 'fas fa-thermometer-half ' + (status === 'normal' ? 'text-[var(--figma-green)]' : status === 'warning' ? 'text-[var(--figma-orange)]' : 'text-[var(--figma-red)]');
 
     const pct = Math.min(100, (currentTempC / GAUGE_MAX) * 100);
     gaugeFill.style.width = pct + '%';
     gaugeFill.className = 'gauge-fill h-full rounded-full ' +
-      (status === 'normal' ? 'bg-green-500' : status === 'warning' ? 'bg-amber-500' : 'bg-red-500');
+      (status === 'normal' ? 'bg-[var(--figma-green)]' : status === 'warning' ? 'bg-[var(--figma-orange)]' : 'bg-[var(--figma-red)]');
 
-    alertBox.className = 'rounded-lg p-4 mb-4 border ' +
-      (status === 'normal' ? 'bg-slate-700/50 border-slate-600' : status === 'warning' ? 'bg-amber-900/30 border-amber-600' : 'bg-red-900/30 border-red-600 pulse-critical');
+    alertBox.className = 'rounded-[var(--figma-radius)] p-4 mb-4 border ' +
+      (status === 'normal' ? 'bg-[var(--figma-green)]/10 border-[var(--figma-green)]/30' : status === 'warning' ? 'bg-[var(--figma-orange)]/20 border-[var(--figma-orange)]' : 'bg-[var(--figma-red)]/20 border-[var(--figma-red)] pulse-critical');
+
     if (status === 'normal') {
-      alertMessage.innerHTML = 'No alerts. Temperature within safe range.';
+      alertMessage.innerHTML = '<i class="fas fa-check-circle mr-2" style="color:var(--figma-green)"></i>System Normal<br>Pipe temperature is within safe operating range. Current: ' + (useFahrenheit ? cToF(currentTempC).toFixed(1) + '°F' : currentTempC.toFixed(1) + '°C');
     } else if (status === 'warning') {
-      alertMessage.innerHTML = '<strong>WARNING:</strong> Temperature approaching limits. Current: <strong>' + currentTempC.toFixed(1) + '°C</strong> (' + cToF(currentTempC).toFixed(1) + '°F).';
+      alertMessage.innerHTML = '<strong>WARNING:</strong> Temperature approaching limits. Current: ' + (useFahrenheit ? cToF(currentTempC).toFixed(1) + '°F' : currentTempC.toFixed(1) + '°C') + '.';
     } else {
-      alertMessage.innerHTML = '<strong>CRITICAL: High Temperature Alert</strong> Pipe temperature has exceeded safe limits! Immediate action required. Current: <strong>' + currentTempC.toFixed(1) + '°C</strong> (' + cToF(currentTempC).toFixed(1) + '°F).';
+      var tempStr = useFahrenheit ? cToF(currentTempC).toFixed(1) + '°F' : currentTempC.toFixed(1) + '°C';
+      alertMessage.innerHTML = '<strong>CRITICAL: High Temperature Alert</strong><br>Pipe temperature has exceeded safe limits! Immediate action required to prevent system damage.<br>Current: <span style="color:var(--figma-red);font-weight:600">' + tempStr + '</span>';
     }
 
+    const statusLabel = status === 'normal' ? 'NORMAL' : status === 'warning' ? 'WARNING' : 'CRITICAL';
     statusDot.className = 'w-2 h-2 rounded-full ' +
-      (status === 'normal' ? 'bg-green-500' : status === 'warning' ? 'bg-amber-500' : 'bg-red-500');
-    statusText.textContent = 'System Status: ' + (status === 'normal' ? 'Normal' : status === 'warning' ? 'Warning' : 'CRITICAL') + (paused ? ' • Paused' : ' • Live');
+      (status === 'normal' ? 'bg-[var(--figma-green)]' : status === 'warning' ? 'bg-[var(--figma-orange)]' : 'bg-[var(--figma-red)]');
+    var liveDotEl = statusText.nextElementSibling;
+    var liveTextEl = liveDotEl && liveDotEl.nextElementSibling;
+    statusText.textContent = 'System Status: ' + statusLabel;
+    if (liveDotEl) liveDotEl.className = 'w-1.5 h-1.5 rounded-full ' + (paused ? 'bg-[var(--figma-text-muted)]' : (status === 'normal' ? 'bg-[var(--figma-green)]' : status === 'warning' ? 'bg-[var(--figma-orange)]' : 'bg-[var(--figma-red)]'));
+    if (liveTextEl) liveTextEl.textContent = paused ? 'Paused' : 'Live';
 
-    if (emailEnabled.checked && !paused) {
+    if (emailEnabled && emailEnabled.checked && !paused) {
       if (status === 'warning' && !emailSentWarning) {
         emailSentWarning = true;
-        openMailto('Warning: Pipe temperature in warning range', currentTempC);
+        sendEmailJS('Warning', currentTempC).then(function () { showToast('Warning email sent.', 'success'); }).catch(function (err) {
+          showToast('Email failed: ' + (err.text || err.message || 'Check EmailJS config'), 'error');
+          emailSentWarning = false;
+        });
       }
       if (status === 'critical' && !emailSentCritical) {
         emailSentCritical = true;
-        openMailto('CRITICAL: Pipe temperature exceeded safe limits', currentTempC);
+        sendEmailJS('CRITICAL', currentTempC).then(function () { showToast('Critical alert email sent.', 'success'); }).catch(function (err) {
+          showToast('Email failed: ' + (err.text || err.message || 'Check EmailJS config'), 'error');
+          emailSentCritical = false;
+        });
       }
     }
     if (status === 'normal') {
@@ -102,13 +223,278 @@
       emailSentCritical = false;
     }
 
-    lastStatus = status;
+    if (status === 'critical' && !paused) startCriticalTimer();
+    else {
+      if (criticalTimerId) clearInterval(criticalTimerId);
+      criticalTimerId = null;
+      criticalStartTime = null;
+      updateCriticalDurationUI(0, false);
+      document.getElementById('criticalDurationBanner').classList.add('hidden');
+    }
+
     updateScaleLabels();
+    updateOverheatRisk();
+    updateFailurePrediction();
+    var footerUpdated = document.getElementById('footerLastUpdated');
+    var footerPoints = document.getElementById('footerDataPoints');
+    var footerStatus = document.getElementById('footerMonitoringStatus');
+    if (footerUpdated) footerUpdated.textContent = new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true });
+    if (footerPoints) footerPoints.textContent = tempHistory.length;
+    if (footerStatus) footerStatus.textContent = paused ? 'Paused' : 'Active';
+  }
+
+  function updateOverheatRisk() {
+    const tempRate = getTempRate();
+    const risk = failureProbability(currentTempC, tempRate, pumpLoad, pressure);
+    const riskScoreEl = document.getElementById('overheatRiskScore');
+    const riskLabelEl = document.getElementById('overheatRiskLabel');
+    const riskBarEl = document.getElementById('overheatRiskBar');
+    const timeEl = document.getElementById('overheatTime');
+    const alertBoxEl = document.getElementById('overheatAlertBox');
+    const stableMsgEl = document.getElementById('overheatStableMsg');
+    const alertTextEl = document.getElementById('overheatAlertText');
+
+    var riskLevel = risk >= 75 ? 'CRITICAL' : risk >= 50 ? 'HIGH' : 'NORMAL';
+    var riskColor = risk >= 75 ? 'var(--figma-red)' : risk >= 50 ? 'var(--figma-orange)' : 'var(--figma-green)';
+    if (riskScoreEl) riskScoreEl.textContent = risk.toFixed(1) + '%';
+    if (riskLabelEl) {
+      riskLabelEl.textContent = riskLevel;
+      riskLabelEl.className = 'text-sm font-medium';
+      riskLabelEl.style.color = riskColor;
+    }
+    if (riskScoreEl) riskScoreEl.style.color = riskColor;
+    if (riskBarEl) {
+      riskBarEl.style.width = Math.min(100, risk) + '%';
+      riskBarEl.style.backgroundColor = riskColor;
+    }
+    if (stableMsgEl) stableMsgEl.classList.toggle('hidden', tempRate > 0);
+    const trendRate = getTrendRate();
+    const mins = timeToCritical(currentTempC, trendRate);
+    if (timeEl) timeEl.textContent = mins != null ? (mins < 1 ? '0 min' : Math.round(mins) + ' min') : '—';
+    if (timeEl) timeEl.style.color = 'var(--figma-text)';
+
+    const tempRateEl = document.getElementById('overheatTempRate');
+    const pumpEl = document.getElementById('overheatPumpLoad');
+    const pressureEl = document.getElementById('overheatPressure');
+    const currentTempEl = document.getElementById('overheatCurrentTemp');
+    if (tempRateEl) tempRateEl.textContent = (tempRate >= 0 ? '+' : '') + tempRate.toFixed(2) + '°C/min';
+    if (pumpEl) { pumpEl.textContent = Math.round(pumpLoad) + '%'; pumpEl.className = 'font-medium text-pump'; }
+    if (pressureEl) pressureEl.textContent = Math.round(pressure) + ' PSI';
+    if (currentTempEl) currentTempEl.textContent = currentTempC.toFixed(1) + '°C';
+    if (alertBoxEl) {
+      alertBoxEl.classList.toggle('hidden', risk < 50);
+      if (alertTextEl) alertTextEl.textContent = risk >= 75 ? 'Critical risk detected! Consider immediate intervention to prevent pump damage.' : 'Elevated risk detected. Monitor closely and prepare for potential intervention.';
+    }
+  }
+
+  function updateFailurePrediction() {
+    const tempRate = getTempRate();
+    const trendRate = getTrendRate();
+    const accel = getAcceleration();
+    const prob = failureProbability(currentTempC, tempRate, pumpLoad, pressure);
+    const trendRateAdj = Math.max(0, trendRate);
+    const mins = timeToCritical(currentTempC, trendRateAdj);
+    const dataPoints = tempHistory.length;
+    let confidencePct = 0;
+    if (dataPoints >= 50) confidencePct = 80 + Math.min(20, (dataPoints - 50) / 5);
+    else if (dataPoints >= 20) confidencePct = 45 + (dataPoints - 20) / 30 * 35;
+    else if (dataPoints >= 10) confidencePct = 25 + (dataPoints - 10) * 2;
+    else confidencePct = dataPoints * 2;
+    confidencePct = Math.min(100, Math.round(confidencePct));
+    const confidenceLabel = confidencePct >= 70 ? 'High' : confidencePct >= 40 ? 'Medium' : 'Low';
+
+    const probEl = document.getElementById('failureProb');
+    const probBarEl = document.getElementById('failureProbBar');
+    const timeEl = document.getElementById('failureTime');
+    const confEl = document.getElementById('failureConfidence');
+    const confBarEl = document.getElementById('failureConfidenceBar');
+    const confPctEl = document.getElementById('failureConfidencePct');
+    if (probEl) probEl.textContent = Math.round(prob) + '%';
+    if (probBarEl) probBarEl.style.width = Math.min(100, prob) + '%';
+    if (timeEl) timeEl.textContent = mins != null ? (mins < 1 ? '0 minutes' : Math.round(mins) + ' minutes') : 'Not Applicable';
+    if (confEl) confEl.textContent = confidenceLabel;
+    if (confBarEl) confBarEl.style.width = confidencePct + '%';
+    if (confPctEl) confPctEl.textContent = confidencePct + '%';
+
+    const factorTemp = document.getElementById('factorTemp');
+    const factorTempRate = document.getElementById('factorTempRate');
+    const factorPumpLoad = document.getElementById('factorPumpLoad');
+    const factorPressure = document.getElementById('factorPressure');
+    if (factorTemp) factorTemp.textContent = currentTempC.toFixed(1) + '°C';
+    if (factorTempRate) factorTempRate.textContent = tempRate.toFixed(1) + '°/min';
+    if (factorPumpLoad) factorPumpLoad.textContent = Math.round(pumpLoad) + '%';
+    if (factorPressure) factorPressure.textContent = Math.round(pressure) + ' PSI';
+
+    const trendRateEl = document.getElementById('trendRate');
+    const trendAccelEl = document.getElementById('trendAccel');
+    const trendDataPointsEl = document.getElementById('trendDataPoints');
+    if (trendRateEl) trendRateEl.textContent = (trendRate >= 0 ? '+' : '') + trendRate.toFixed(2) + '°C/min';
+    if (trendAccelEl) trendAccelEl.textContent = (accel >= 0 ? '+' : '') + accel.toFixed(2) + '°/min²';
+    if (trendDataPointsEl) trendDataPointsEl.textContent = dataPoints;
   }
 
   function openMailto(subject, tempC) {
     const body = 'Pipe Temperature Alert\nCurrent: ' + tempC.toFixed(1) + '°C (' + cToF(tempC).toFixed(1) + '°F)\nTime: ' + new Date().toLocaleString();
     window.location.href = 'mailto:?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body);
+  }
+
+  function getEmailJSConfig() {
+    return {
+      serviceId: (document.getElementById('emailjsServiceId') || {}).value || localStorage.getItem('emailjs_serviceId') || '',
+      templateId: (document.getElementById('emailjsTemplateId') || {}).value || localStorage.getItem('emailjs_templateId') || '',
+      publicKey: (document.getElementById('emailjsPublicKey') || {}).value || localStorage.getItem('emailjs_publicKey') || ''
+    };
+  }
+
+  function saveEmailJSConfig() {
+    const c = getEmailJSConfig();
+    if (c.serviceId) localStorage.setItem('emailjs_serviceId', c.serviceId);
+    if (c.templateId) localStorage.setItem('emailjs_templateId', c.templateId);
+    if (c.publicKey) localStorage.setItem('emailjs_publicKey', c.publicKey);
+  }
+
+  function sendEmailJS(level, tempC, toEmail) {
+    const c = getEmailJSConfig();
+    if (!c.serviceId || !c.templateId || !c.publicKey) return Promise.reject(new Error('EmailJS not configured'));
+    if (typeof emailjs === 'undefined') return Promise.reject(new Error('EmailJS not loaded'));
+    toEmail = toEmail || (document.getElementById('emailjsTestTo') && document.getElementById('emailjsTestTo').value.trim()) || '';
+    const params = {
+      to_email: toEmail,
+      alert_level: level,
+      temperature: tempC.toFixed(1) + '°C (' + cToF(tempC).toFixed(1) + '°F)',
+      timestamp: new Date().toLocaleString(),
+      message: 'Pipe temperature alert: ' + level + '. Current: ' + tempC.toFixed(1) + '°C.'
+    };
+    return emailjs.send(c.serviceId, c.templateId, params, c.publicKey);
+  }
+
+  function formatTicketId(t) {
+    var d = new Date(t.createdAt);
+    var y = d.getFullYear();
+    var m = String(d.getMonth() + 1).padStart(2, '0');
+    var day = String(d.getDate()).padStart(2, '0');
+    var seq = String(t.id).padStart(4, '0');
+    return 'TKT-' + y + m + day + '-' + seq;
+  }
+
+  function createTicket(isAuto) {
+    var desc = isAuto
+      ? 'CRITICAL: Temperature has remained in critical range (≥95°C) for 90+ seconds. Immediate maintenance required.'
+      : (getStatus(currentTempC) === 'critical' ? 'Critical temperature' : 'Manual request') + ' – Temp: ' + currentTempC.toFixed(1) + '°C, Pump: ' + Math.round(pumpLoad) + '%, Pressure: ' + Math.round(pressure) + ' PSI';
+    const ticket = {
+      id: ticketIdCounter++,
+      createdAt: Date.now(),
+      type: isAuto ? 'auto' : 'manual',
+      status: 'open',
+      temperature: currentTempC,
+      pumpLoad: pumpLoad,
+      pressure: pressure,
+      description: desc
+    };
+    tickets.push(ticket);
+    updateTicketsUI();
+    if (isAuto) showToast('Maintenance ticket created automatically after 90s critical.', 'success');
+  }
+
+  function updateTicketsUI() {
+    const listEl = document.getElementById('ticketsList');
+    const emptyEl = document.getElementById('ticketsEmpty');
+    const totalEl = document.getElementById('statTotalTickets');
+    const openEl = document.getElementById('statOpenTickets');
+    const autoEl = document.getElementById('statAutoTickets');
+    if (totalEl) totalEl.textContent = tickets.length;
+    if (openEl) openEl.textContent = tickets.filter(function (t) { return t.status === 'open'; }).length;
+    if (autoEl) autoEl.textContent = tickets.filter(function (t) { return t.type === 'auto'; }).length;
+    if (tickets.length === 0) {
+      if (listEl) listEl.innerHTML = '';
+      if (emptyEl) emptyEl.classList.remove('hidden');
+      return;
+    }
+    if (emptyEl) emptyEl.classList.add('hidden');
+    if (!listEl) return;
+    listEl.innerHTML = tickets.slice().reverse().map(function (t) {
+      const timeStr = new Date(t.createdAt).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+      const statusBtn = t.status === 'open' ? 'Mark Closed' : 'Reopen';
+      const tktId = formatTicketId(t);
+      const readings = 'Temp: ' + t.temperature.toFixed(1) + '°C, Load: ' + t.pumpLoad.toFixed(1) + '%, Pressure: ' + t.pressure.toFixed(1) + ' PSI';
+      return '<div class="bg-[var(--figma-border)]/50 border border-[var(--figma-border)] rounded-[var(--figma-radius)] p-3 flex flex-wrap items-center justify-between gap-2" data-ticket-id="' + t.id + '">' +
+        '<div class="min-w-0 flex-1">' +
+        '<div class="flex flex-wrap items-center gap-2 mb-1"><span class="text-[var(--figma-text)] font-medium">' + tktId + '</span>' +
+        '<span class="text-xs px-1.5 py-0.5 rounded ' + (t.type === 'auto' ? 'bg-[var(--figma-red)]/30 text-[var(--figma-red)]' : 'bg-[var(--figma-orange)]/30 text-[var(--figma-orange)]') + '">' + (t.type === 'auto' ? 'AUTO' : 'MANUAL') + '</span>' +
+        '<span class="text-xs px-1.5 py-0.5 rounded ' + (t.status === 'open' ? 'bg-[var(--figma-green)]/30 text-[var(--figma-green)]' : 'bg-[var(--figma-text-muted)]/30 text-[var(--figma-text-muted)]') + '">' + (t.status === 'open' ? 'OPEN' : 'CLOSED') + '</span></div>' +
+        '<div class="text-[var(--figma-text-muted)] text-sm">' + t.description + '</div>' +
+        '<div class="text-[var(--figma-text-muted)] text-xs mt-1">' + timeStr + '</div>' +
+        '<div class="text-[var(--figma-text-muted)] text-xs mt-0.5">' + readings + '</div></div>' +
+        '<div class="flex items-center gap-2">' +
+        '<button class="ticket-toggle px-3 py-1.5 rounded-[var(--figma-radius)] text-xs bg-[var(--figma-green)] hover:opacity-90 text-white flex items-center gap-1"><i class="fas fa-check"></i> ' + statusBtn + '</button>' +
+        '<button class="ticket-export px-3 py-1.5 rounded-[var(--figma-radius)] text-xs bg-[var(--figma-border)] hover:bg-[var(--figma-text-muted)]/30 text-[var(--figma-text)] flex items-center gap-1"><i class="fas fa-download"></i> Export</button>' +
+        '</div></div>';
+    }).join('');
+    listEl.querySelectorAll('.ticket-toggle').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        const card = btn.closest('[data-ticket-id]');
+        const id = parseInt(card.getAttribute('data-ticket-id'), 10);
+        const t = tickets.find(function (x) { return x.id === id; });
+        if (t) { t.status = t.status === 'open' ? 'closed' : 'open'; updateTicketsUI(); }
+      });
+    });
+    listEl.querySelectorAll('.ticket-export').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        const card = btn.closest('[data-ticket-id]');
+        const id = parseInt(card.getAttribute('data-ticket-id'), 10);
+        const t = tickets.find(function (x) { return x.id === id; });
+        if (!t) return;
+        const text = 'Maintenance Ticket #' + t.id + '\nType: ' + t.type + '\nStatus: ' + t.status + '\nCreated: ' + new Date(t.createdAt).toLocaleString() + '\n\n' + t.description + '\nTemperature: ' + t.temperature.toFixed(1) + '°C\nPump Load: ' + Math.round(t.pumpLoad) + '%\nPressure: ' + Math.round(t.pressure) + ' PSI';
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(new Blob([text], { type: 'text/plain' }));
+        a.download = 'ticket-' + t.id + '.txt';
+        a.click();
+        URL.revokeObjectURL(a.href);
+      });
+    });
+  }
+
+  function startCriticalTimer() {
+    if (criticalTimerId) return;
+    criticalStartTime = Date.now();
+    criticalTimerId = setInterval(function () {
+      if (getStatus(currentTempC) !== 'critical' || paused) {
+        clearInterval(criticalTimerId);
+        criticalTimerId = null;
+        criticalStartTime = null;
+        updateCriticalDurationUI(0, false);
+        document.getElementById('criticalDurationBanner').classList.add('hidden');
+        return;
+      }
+      const elapsed = Math.floor((Date.now() - criticalStartTime) / 1000);
+      updateCriticalDurationUI(elapsed, true);
+      if (elapsed >= CRITICAL_AUTO_TICKET_SEC) {
+        createTicket(true);
+        criticalStartTime = Date.now();
+      }
+    }, 1000);
+  }
+
+  function updateCriticalDurationUI(elapsed, isCritical) {
+    const el = document.getElementById('criticalDurationEl');
+    const remEl = document.getElementById('criticalDurationRemaining');
+    const barEl = document.getElementById('criticalDurationBar');
+    const banner = document.getElementById('criticalDurationBanner');
+    if (!el || !remEl || !barEl) return;
+    if (!isCritical || paused) {
+      el.textContent = '0:00';
+      remEl.textContent = '90s remaining';
+      barEl.style.width = '0%';
+      if (banner) banner.classList.add('hidden');
+      return;
+    }
+    const m = Math.floor(elapsed / 60);
+    const s = elapsed % 60;
+    el.textContent = m + ':' + (s < 10 ? '0' : '') + s;
+    const remaining = Math.max(0, CRITICAL_AUTO_TICKET_SEC - elapsed);
+    remEl.textContent = remaining + 's remaining';
+    barEl.style.width = Math.min(100, (elapsed / CRITICAL_AUTO_TICKET_SEC) * 100) + '%';
+    if (banner) banner.classList.remove('hidden');
   }
 
   function tick() {
@@ -118,6 +504,9 @@
     currentTempC = Math.max(0, Math.min(GAUGE_MAX, currentTempC));
     tempHistory.push({ t: Date.now(), c: currentTempC });
     if (tempHistory.length > HISTORY_LENGTH) tempHistory.shift();
+    var tempRate = getTempRate();
+    pumpLoad = computePumpLoadFromTemp(currentTempC);
+    pressure = computePressureFromTempAndRate(currentTempC, tempRate);
     updateDisplay();
     updateChart();
   }
@@ -129,7 +518,7 @@
       data: {
         labels: [],
         datasets: [
-          { label: 'Temperature (°C)', data: [], borderColor: '#60a5fa', backgroundColor: 'rgba(96, 165, 250, 0.1)', fill: true, tension: 0.3 },
+          { label: 'Temperature (°C)', data: [], borderColor: '#7DD3FC', backgroundColor: 'rgba(125, 211, 252, 0.1)', fill: true, tension: 0.3 },
         ]
       },
       options: {
@@ -140,8 +529,7 @@
           x: { grid: { color: 'rgba(148, 163, 184, 0.2)' }, ticks: { color: '#94a3b8', maxTicksLimit: 10 } }
         },
         plugins: {
-          legend: { display: false },
-          annotation: false
+          legend: { display: false }
         }
       },
       plugins: [{
@@ -152,13 +540,13 @@
           const y75 = yScale.getPixelForValue(75);
           const y95 = yScale.getPixelForValue(95);
           ctx.save();
-          ctx.strokeStyle = 'rgba(34, 197, 94, 0.6)';
+          ctx.strokeStyle = 'rgba(22, 179, 100, 0.6)';
           ctx.setLineDash([5, 5]);
           ctx.beginPath();
           ctx.moveTo(chart.chartArea.left, y75);
           ctx.lineTo(chart.chartArea.right, y75);
           ctx.stroke();
-          ctx.strokeStyle = 'rgba(245, 158, 11, 0.6)';
+          ctx.strokeStyle = 'rgba(247, 144, 9, 0.6)';
           ctx.beginPath();
           ctx.moveTo(chart.chartArea.left, y95);
           ctx.lineTo(chart.chartArea.right, y95);
@@ -171,7 +559,7 @@
 
   function updateChart() {
     if (!chart) return;
-    const labels = tempHistory.map(d => new Date(d.t).toLocaleTimeString());
+    const labels = tempHistory.map(d => formatTime12h(d.t));
     const data = tempHistory.map(d => d.c);
     chart.data.labels = labels;
     chart.data.datasets[0].data = data;
@@ -190,7 +578,7 @@
       let out = 'Pipe Temperature Report\n' + 'Generated: ' + now.toLocaleString() + '\n\n';
       out += 'Statistics: Avg ' + avg.toFixed(1) + '°C, Min ' + min.toFixed(1) + '°C, Max ' + max.toFixed(1) + '°C\n\n';
       out += 'Time\t\tTemperature (°C)\n';
-      tempHistory.forEach(d => { out += new Date(d.t).toLocaleTimeString() + '\t' + d.c.toFixed(1) + '\n'; });
+      tempHistory.forEach(d => { out += formatTime12h(d.t) + '\t' + d.c.toFixed(1) + '\n'; });
       download('temperature-report-' + stamp + '.txt', 'text/plain', out);
     } else if (format === 'csv') {
       let out = 'Timestamp,Temperature_C\n';
@@ -218,7 +606,7 @@
       html += '<table><tr><th>Time</th><th>Temperature (°C)</th><th>Status</th></tr>';
       tempHistory.slice(-20).reverse().forEach(d => {
         const s = getStatus(d.c);
-        html += '<tr><td>' + new Date(d.t).toLocaleTimeString() + '</td><td>' + d.c.toFixed(1) + '</td><td class="' + s + '">' + (s === 'normal' ? 'Safe' : s === 'warning' ? 'Warning' : 'Critical') + '</td></tr>';
+        html += '<tr><td>' + formatTime12h(d.t) + '</td><td>' + d.c.toFixed(1) + '</td><td class="' + s + '">' + (s === 'normal' ? 'Safe' : s === 'warning' ? 'Warning' : 'Critical') + '</td></tr>';
       });
       html += '</table></body></html>';
       download('temperature-report-' + stamp + '.html', 'text/html', html);
@@ -242,22 +630,22 @@
 
   unitC.addEventListener('click', function () {
     useFahrenheit = false;
-    unitC.className = 'unit-btn px-3 py-1.5 text-sm bg-blue-600 text-white';
-    unitF.className = 'unit-btn px-3 py-1.5 text-sm bg-slate-700 text-gray-400 hover:bg-slate-600';
+    unitC.className = 'unit-btn px-3 py-1.5 text-sm bg-[#3B82F6] text-white';
+    unitF.className = 'unit-btn px-3 py-1.5 text-sm bg-transparent text-[var(--figma-text-muted)] hover:bg-[var(--figma-border)]';
     updateDisplay();
   });
   unitF.addEventListener('click', function () {
     useFahrenheit = true;
-    unitF.className = 'unit-btn px-3 py-1.5 text-sm bg-blue-600 text-white';
-    unitC.className = 'unit-btn px-3 py-1.5 text-sm bg-slate-700 text-gray-400 hover:bg-slate-600';
+    unitF.className = 'unit-btn px-3 py-1.5 text-sm bg-[#3B82F6] text-white';
+    unitC.className = 'unit-btn px-3 py-1.5 text-sm bg-transparent text-[var(--figma-text-muted)] hover:bg-[var(--figma-border)]';
     updateDisplay();
   });
 
   pauseBtn.addEventListener('click', function () {
     paused = !paused;
     this.textContent = paused ? 'Resume Monitoring' : 'Pause Monitoring';
-    this.classList.toggle('bg-red-600', paused);
-    this.classList.toggle('border-red-500', paused);
+    this.style.backgroundColor = paused ? 'var(--figma-green)' : 'var(--figma-red)';
+    this.style.borderColor = paused ? 'var(--figma-green)' : 'var(--figma-red)';
     updateDisplay();
   });
 
@@ -266,8 +654,49 @@
   autoExportInterval.addEventListener('change', startAutoExport);
 
   testEmailBtn.addEventListener('click', function () {
-    if (!emailEnabled.checked) return;
-    openMailto('Test: Pipe Temperature Monitor', currentTempC);
+    const toInput = document.getElementById('emailjsTestTo');
+    const toEmail = toInput && toInput.value.trim();
+    if (!toEmail) {
+      showToast('Email address required', 'error');
+      return;
+    }
+    const c = getEmailJSConfig();
+    if (!c.serviceId || !c.templateId || !c.publicKey) {
+      showToast('Configure EmailJS (Service ID, Template ID, Public Key) first', 'error');
+      return;
+    }
+    saveEmailJSConfig();
+    sendEmailJS('Test', currentTempC, toEmail).then(function () {
+      showToast('Test email sent to ' + toEmail, 'success');
+    }).catch(function (err) {
+      showToast('Send failed: ' + (err.text || err.message || 'Check config'), 'error');
+    });
+  });
+
+  var emailjsToggle = document.getElementById('emailjsToggleSetup');
+  var emailjsSetup = document.getElementById('emailjsSetup');
+  var emailjsWarning = document.getElementById('emailjsWarning');
+  if (emailjsToggle && emailjsSetup) {
+    emailjsToggle.addEventListener('click', function (e) {
+      e.preventDefault();
+      var show = emailjsSetup.classList.contains('hidden');
+      emailjsSetup.classList.toggle('hidden', !show);
+      emailjsToggle.textContent = show ? 'Hide setup instructions' : 'Show setup instructions';
+    });
+  }
+
+  (function loadEmailJSFromStorage() {
+    var s = document.getElementById('emailjsServiceId');
+    var t = document.getElementById('emailjsTemplateId');
+    var p = document.getElementById('emailjsPublicKey');
+    if (s && localStorage.getItem('emailjs_serviceId')) s.value = localStorage.getItem('emailjs_serviceId');
+    if (t && localStorage.getItem('emailjs_templateId')) t.value = localStorage.getItem('emailjs_templateId');
+    if (p && localStorage.getItem('emailjs_publicKey')) p.value = localStorage.getItem('emailjs_publicKey');
+  })();
+
+  document.getElementById('createTicketBtn').addEventListener('click', function () {
+    createTicket(false);
+    showToast('Manual maintenance ticket created.', 'success');
   });
 
   for (let i = 0; i < 30; i++) {
@@ -275,8 +704,17 @@
     currentTempC = Math.max(0, Math.min(GAUGE_MAX, currentTempC));
     tempHistory.push({ t: Date.now() - (30 - i) * UPDATE_MS, c: currentTempC });
   }
+  var seedRate = getTempRate();
+  pumpLoad = computePumpLoadFromTemp(currentTempC);
+  pressure = computePressureFromTempAndRate(currentTempC, seedRate);
   initChart();
   updateDisplay();
   updateChart();
+  updateCriticalDurationUI(0, false);
+  updateTicketsUI();
   updateInterval = setInterval(tick, UPDATE_MS);
+
+  [document.getElementById('emailjsServiceId'), document.getElementById('emailjsTemplateId'), document.getElementById('emailjsPublicKey')].forEach(function (input) {
+    if (input) input.addEventListener('blur', saveEmailJSConfig);
+  });
 })();

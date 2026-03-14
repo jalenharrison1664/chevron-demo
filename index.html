@@ -7,32 +7,64 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
   <style>
-    body { background: #0f172a; font-family: system-ui, -apple-system, sans-serif; }
+    /* Figma design system: exact colors, spacing, radii, shadows */
+    :root {
+      --figma-bg-page: #1A1E27;
+      --figma-bg-card: #232833;
+      --figma-border: #2D3548;
+      --figma-orange: #F79009;
+      --figma-green: #16B364;
+      --figma-red: #F04438;
+      --figma-pump-magenta: #EC4899;
+      --figma-blue-accent: #7DD3FC;
+      --figma-text: #FFFFFF;
+      --figma-text-muted: #94A3B8;
+      --figma-radius: 8px;
+      --figma-shadow: 0 1px 3px rgba(0,0,0,0.25);
+    }
+    body { background: var(--figma-bg-page); font-family: system-ui, -apple-system, sans-serif; color: var(--figma-text); line-height: 1.5; }
+    .dashboard-card { background: var(--figma-bg-card); border: 1px solid var(--figma-border); border-radius: var(--figma-radius); box-shadow: var(--figma-shadow); padding: 1.5rem; }
     .gauge-fill { transition: width 0.5s ease, background 0.3s ease; }
     .pulse-critical { animation: pulse-critical 1.5s ease-in-out infinite; }
-    @keyframes pulse-critical { 0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.5); } 50% { opacity: 0.9; box-shadow: 0 0 0 12px rgba(239, 68, 68, 0); } }
+    @keyframes pulse-critical { 0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(244, 67, 54, 0.5); } 50% { opacity: 0.9; box-shadow: 0 0 0 12px rgba(244, 67, 54, 0); } }
     .chart-container { position: relative; height: 220px; }
+    .toast-container { position: fixed; top: 1rem; right: 1rem; z-index: 9999; display: flex; flex-direction: column; gap: 0.5rem; pointer-events: none; }
+    .toast { background: var(--figma-bg-card); border: 1px solid var(--figma-border); color: var(--figma-text); padding: 0.75rem 1rem; border-radius: var(--figma-radius); font-size: 0.875rem; box-shadow: var(--figma-shadow); pointer-events: auto; }
+    .toast.success { border-color: var(--figma-green); }
+    .toast.error { border-color: var(--figma-red); }
+    .toast.warning { border-color: var(--figma-orange); }
+    .text-pump { color: var(--figma-pump-magenta); }
+    .text-figma-orange { color: var(--figma-orange); }
+    .text-figma-green { color: var(--figma-green); }
+    .text-figma-blue { color: var(--figma-blue-accent); }
   </style>
 </head>
-<body class="text-gray-200 min-h-screen">
+<body class="min-h-screen">
 
-  <div class="max-w-6xl mx-auto p-6 space-y-6">
+  <div class="max-w-6xl mx-auto p-6 space-y-6" style="--tw-space-y-reverse: 0;">
+    <!-- Chevron branding -->
+    <div class="flex items-center justify-center pb-2 border-b border-[var(--figma-border)]">
+      <img src="assets/chevron-logo.png" alt="Chevron" class="h-12 w-auto object-contain" />
+    </div>
     <!-- Header -->
     <div class="flex items-center justify-between flex-wrap gap-4">
       <div>
-        <h1 class="text-2xl font-bold flex items-center gap-2">
-          <i class="fas fa-wave-square text-blue-400"></i>
+        <h1 class="text-2xl font-bold flex items-center gap-2 text-[var(--figma-text)] leading-tight">
+          <i class="fas fa-wave-square text-[var(--figma-blue-accent)]"></i>
           Pipe Temperature Monitor
         </h1>
-        <p class="text-gray-400 text-sm mt-1">Real-time temperature monitoring and alert system.</p>
+        <p class="text-[var(--figma-text-muted)] text-sm mt-1">Real-time temperature monitoring and alert system</p>
       </div>
-      <div class="flex items-center gap-4">
+      <div class="flex items-center gap-4 items-center">
         <div id="systemStatus" class="flex items-center gap-2 text-sm">
-          <span class="w-2 h-2 rounded-full bg-green-500" id="statusDot"></span>
-          <span id="statusText">System Status: Normal • Live</span>
+          <span class="w-2 h-2 rounded-full bg-[var(--figma-green)]" id="statusDot"></span>
+          <span id="statusText" class="text-[var(--figma-text)] font-medium">System Status: NORMAL</span>
+          <span class="w-1.5 h-1.5 rounded-full bg-[var(--figma-text-muted)]"></span>
+          <span class="text-[var(--figma-text)]">Live</span>
         </div>
-        <button id="pauseBtn" class="px-4 py-2 rounded-lg border border-gray-600 hover:bg-gray-800 transition text-sm">
+        <button id="pauseBtn" class="px-4 py-2 rounded-[var(--figma-radius)] bg-[var(--figma-red)] hover:opacity-90 border border-[var(--figma-red)] text-white transition text-sm font-medium">
           Pause Monitoring
         </button>
       </div>
@@ -40,22 +72,22 @@
 
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <!-- Pipe Temperature -->
-      <div class="bg-slate-800/80 border border-slate-700 rounded-xl p-6">
+      <div class="dashboard-card">
         <div class="flex items-center justify-between mb-4">
-          <h2 class="text-lg font-semibold flex items-center gap-2">
-            <i class="fas fa-thermometer-half text-amber-400"></i>
+          <h2 class="text-lg font-semibold flex items-center gap-2 text-[var(--figma-text)]" id="pipeTempTitle">
+            <i class="fas fa-thermometer-half text-[var(--figma-green)]" id="pipeTempIcon"></i>
             Pipe Temperature
           </h2>
-          <div class="flex rounded-lg overflow-hidden border border-slate-600">
-            <button id="unitC" class="unit-btn px-3 py-1.5 text-sm bg-blue-600 text-white">°C</button>
-            <button id="unitF" class="unit-btn px-3 py-1.5 text-sm bg-slate-700 text-gray-400 hover:bg-slate-600">°F</button>
+          <div class="flex rounded-[var(--figma-radius)] overflow-hidden border border-[var(--figma-border)]">
+            <button id="unitC" class="unit-btn px-3 py-1.5 text-sm bg-[#3B82F6] text-white">°C</button>
+            <button id="unitF" class="unit-btn px-3 py-1.5 text-sm bg-transparent text-[var(--figma-text-muted)] hover:bg-[var(--figma-border)]">°F</button>
           </div>
         </div>
-        <div id="tempDisplay" class="text-5xl font-bold mb-2 text-green-400">0.0°C</div>
-        <div class="h-3 bg-slate-700 rounded-full overflow-hidden mb-2">
-          <div id="gaugeFill" class="gauge-fill h-full rounded-full bg-green-500" style="width: 0%; max-width: 100%;"></div>
+        <div id="tempDisplay" class="text-5xl font-bold mb-2 text-[var(--figma-green)]">0.0°C</div>
+        <div class="h-3 bg-[var(--figma-border)] rounded-full overflow-hidden mb-2">
+          <div id="gaugeFill" class="gauge-fill h-full rounded-full bg-[var(--figma-green)]" style="width: 0%; max-width: 100%;"></div>
         </div>
-        <div class="flex justify-between text-xs text-gray-500">
+        <div class="flex justify-between text-xs text-[var(--figma-text-muted)]">
           <span id="scaleMin">0°C</span>
           <span id="scaleMid1">75°C</span>
           <span id="scaleMid2">95°C</span>
@@ -64,28 +96,32 @@
       </div>
 
       <!-- Status Alerts -->
-      <div class="bg-slate-800/80 border border-slate-700 rounded-xl p-6">
-        <h2 class="text-lg font-semibold flex items-center gap-2 mb-4">
-          <i class="fas fa-exclamation-triangle text-amber-400"></i>
+      <div class="dashboard-card">
+        <h2 class="text-lg font-semibold flex items-center gap-2 mb-4 text-[var(--figma-text)]">
+          <i class="fas fa-exclamation-triangle text-[var(--figma-orange)]"></i>
           Status Alerts
         </h2>
-        <div id="alertBox" class="rounded-lg p-4 mb-4 bg-slate-700/50 border border-slate-600">
-          <p id="alertMessage" class="text-gray-300">No alerts. Temperature within safe range.</p>
+        <div id="alertBox" class="rounded-[var(--figma-radius)] p-4 mb-4 border border-[var(--figma-border)]">
+          <p id="alertMessage" class="text-[var(--figma-text-muted)]"><i class="fas fa-check-circle text-[var(--figma-green)] mr-2"></i>System Normal<br>Pipe temperature is within safe operating range. Current: 0.0°C</p>
         </div>
         <div class="grid grid-cols-3 gap-2 text-xs">
-          <div class="bg-green-900/40 border border-green-700/50 rounded p-2 text-green-300">Safe: 0–75°C</div>
-          <div class="bg-amber-900/40 border border-amber-700/50 rounded p-2 text-amber-300">Warning: 76–95°C</div>
-          <div class="bg-red-900/40 border border-red-700/50 rounded p-2 text-red-300">Critical: 96°C+</div>
+          <div class="rounded-[var(--figma-radius)] p-2 text-[var(--figma-green)] border border-[var(--figma-green)]/30 bg-[var(--figma-green)]/10" id="rangeSafe">Safe Range: 0 – 75°C</div>
+          <div class="rounded-[var(--figma-radius)] p-2 text-[var(--figma-orange)] border border-[var(--figma-orange)]/30 bg-[var(--figma-orange)]/10" id="rangeWarning">Warning Range: 76 – 95°C</div>
+          <div class="rounded-[var(--figma-radius)] p-2 text-[var(--figma-red)] border border-[var(--figma-red)]/30 bg-[var(--figma-red)]/10" id="rangeCritical">Critical Range: 96°C+</div>
         </div>
       </div>
     </div>
 
     <!-- Temperature History -->
-    <div class="bg-slate-800/80 border border-slate-700 rounded-xl p-6">
-      <h2 class="text-lg font-semibold flex items-center gap-2 mb-4">
-        <i class="fas fa-chart-line text-blue-400"></i>
+    <div class="dashboard-card relative">
+      <h2 class="text-lg font-semibold flex items-center gap-2 mb-4 text-[var(--figma-text)]">
+        <i class="fas fa-chart-line text-[var(--figma-blue-accent)]"></i>
         Temperature History
       </h2>
+      <div id="criticalDurationBanner" class="hidden absolute top-4 right-4 bg-[var(--figma-orange)]/20 border border-[var(--figma-orange)] rounded-[var(--figma-radius)] px-3 py-2 text-[var(--figma-text)] text-sm max-w-xs z-10">
+        <div class="font-medium flex items-center gap-2"><i class="fas fa-exclamation-triangle"></i> Temperature critical - monitoring duration</div>
+        <div class="mt-1">Auto-ticket will be created after 90 seconds.</div>
+      </div>
       <div class="chart-container">
         <canvas id="historyChart"></canvas>
       </div>
@@ -93,52 +129,243 @@
 
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <!-- Data Export -->
-      <div class="bg-slate-800/80 border border-slate-700 rounded-xl p-6">
-        <h2 class="text-lg font-semibold flex items-center gap-2 mb-4">
-          <i class="fas fa-file-export text-emerald-400"></i>
+      <div class="dashboard-card">
+        <h2 class="text-lg font-semibold flex items-center gap-2 mb-4 text-[var(--figma-text)]">
+          <i class="fas fa-file-export text-[var(--figma-blue-accent)]"></i>
           Data Export
         </h2>
         <div class="space-y-3">
           <div>
-            <label class="text-gray-400 text-sm block mb-1">Export format</label>
-            <select id="exportFormat" class="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500">
-              <option value="txt">TXT – Plain text report</option>
+            <label class="text-[var(--figma-text-muted)] text-sm block mb-1">Export Format</label>
+            <select id="exportFormat" class="w-full bg-[var(--figma-border)] border border-[var(--figma-border)] rounded-[var(--figma-radius)] px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[var(--figma-blue-accent)] text-[var(--figma-text)]">
+              <option value="txt">TXT – Plain Text Report</option>
               <option value="csv">CSV – Spreadsheet</option>
-              <option value="html">HTML – Visual report</option>
+              <option value="html">HTML – Visual Report</option>
             </select>
           </div>
           <div class="flex items-center gap-2">
-            <input type="checkbox" id="autoExport" class="rounded border-slate-600 bg-slate-700 text-blue-500 focus:ring-blue-500">
-            <label for="autoExport" class="text-sm text-gray-300">Auto-export every</label>
-            <select id="autoExportInterval" class="bg-slate-700 border border-slate-600 rounded px-2 py-1 text-sm">
-              <option value="60">1 min</option>
-              <option value="300">5 min</option>
-              <option value="600">10 min</option>
-              <option value="3600">1 hour</option>
-            </select>
+            <input type="checkbox" id="autoExport" class="rounded border-[var(--figma-border)] bg-[var(--figma-border)] text-[#3B82F6] focus:ring-[var(--figma-blue-accent)]">
+            <label for="autoExport" class="text-sm text-[var(--figma-text)]">Enable auto-export</label>
           </div>
-          <button id="exportBtn" class="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 rounded-lg transition font-medium text-sm">
-            <i class="fas fa-download"></i> Export now
+          <select id="autoExportInterval" class="w-full bg-[var(--figma-border)] border border-[var(--figma-border)] rounded-[var(--figma-radius)] px-3 py-2 text-sm text-[var(--figma-text-muted)]">
+            <option value="60">Every 1 min</option>
+            <option value="300">Every 5 min</option>
+            <option value="600">Every 10 min</option>
+            <option value="3600">Every 1 hour</option>
+          </select>
+          <p class="text-xs text-[var(--figma-text-muted)]">Files are saved to your browser's default download location</p>
+          <button id="exportBtn" class="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-[#3B82F6] hover:opacity-90 rounded-[var(--figma-radius)] transition font-medium text-sm text-white">
+            <i class="fas fa-download"></i> Export Now
           </button>
         </div>
       </div>
 
-      <!-- Email Notifications -->
-      <div class="bg-slate-800/80 border border-slate-700 rounded-xl p-6">
-        <h2 class="text-lg font-semibold flex items-center gap-2 mb-4">
-          <i class="fas fa-bell text-amber-400"></i>
+      <!-- Email Notifications (EmailJS) -->
+      <div class="dashboard-card">
+        <h2 class="text-lg font-semibold flex items-center gap-2 mb-4 text-[var(--figma-text)]">
+          <i class="fas fa-bell text-[#A78BFA]"></i>
           Email Notifications
+          <i class="fas fa-cog text-[var(--figma-text-muted)] text-sm ml-1"></i>
         </h2>
+        <div id="emailjsWarning" class="rounded-[var(--figma-radius)] p-3 mb-4 bg-[var(--figma-orange)]/20 border border-[var(--figma-orange)]/60 text-[var(--figma-text)] text-sm">
+          EmailJS configuration required to send emails.
+          <a href="#" id="emailjsToggleSetup" class="block mt-1 text-[var(--figma-orange)] hover:underline">Show setup instructions</a>
+        </div>
+        <div id="emailjsSetup" class="hidden mb-4 p-4 bg-[var(--figma-border)]/50 border border-[var(--figma-border)] rounded-[var(--figma-radius)] text-sm">
+          <div class="font-medium text-[var(--figma-text)] mb-2">EmailJS Setup (Free)</div>
+          <ol class="list-decimal list-inside text-[var(--figma-text-muted)] space-y-1 mb-4">
+            <li>Go to <a href="https://www.emailjs.com/" target="_blank" rel="noopener" class="text-[var(--figma-blue-accent)]">emailjs.com</a> and create a free account.</li>
+            <li>Add an email service (Gmail, Outlook, etc.).</li>
+            <li>Create an email template with variables: <code class="bg-slate-600 px-1 rounded">{to_email}</code>, <code class="bg-slate-600 px-1 rounded">{alert_level}</code>, <code class="bg-slate-600 px-1 rounded">{temperature}</code>, <code class="bg-slate-600 px-1 rounded">{timestamp}</code>, <code class="bg-slate-600 px-1 rounded">{message}</code>.</li>
+            <li>Copy your Service ID, Template ID, and Public Key.</li>
+            <li>Paste them below.</li>
+          </ol>
+          <div class="space-y-2">
+            <div><label class="text-[var(--figma-text-muted)] block mb-0.5">Service ID</label><input type="text" id="emailjsServiceId" placeholder="service_xxxxxxxxx" class="w-full bg-[var(--figma-border)] border border-[var(--figma-border)] rounded-[var(--figma-radius)] px-3 py-2 text-[var(--figma-text)] placeholder-[var(--figma-text-muted)] focus:outline-none focus:ring-1 focus:ring-[var(--figma-blue-accent)]"></div>
+            <div><label class="text-[var(--figma-text-muted)] block mb-0.5">Template ID</label><input type="text" id="emailjsTemplateId" placeholder="template_xxxxxxx" class="w-full bg-[var(--figma-border)] border border-[var(--figma-border)] rounded-[var(--figma-radius)] px-3 py-2 text-[var(--figma-text)] placeholder-[var(--figma-text-muted)] focus:outline-none focus:ring-1 focus:ring-[var(--figma-blue-accent)]"></div>
+            <div><label class="text-[var(--figma-text-muted)] block mb-0.5">Public Key</label><input type="text" id="emailjsPublicKey" placeholder="your_public_key" class="w-full bg-[var(--figma-border)] border border-[var(--figma-border)] rounded-[var(--figma-radius)] px-3 py-2 text-[var(--figma-text)] placeholder-[var(--figma-text-muted)] focus:outline-none focus:ring-1 focus:ring-[var(--figma-blue-accent)]"></div>
+          </div>
+        </div>
         <label class="flex items-center gap-2 cursor-pointer mb-2">
-          <input type="checkbox" id="emailEnabled" class="rounded border-slate-600 bg-slate-700 text-blue-500 focus:ring-blue-500">
-          <span class="text-sm">Enable email notifications</span>
+          <input type="checkbox" id="emailEnabled" class="rounded border-[var(--figma-border)] bg-[var(--figma-border)] text-[#3B82F6] focus:ring-[var(--figma-blue-accent)]">
+          <span class="text-sm text-[var(--figma-text)]">Enable email notifications</span>
         </label>
-        <p class="text-xs text-gray-500">Uses your default email client to send alerts when thresholds are crossed.</p>
-        <button id="testEmailBtn" class="mt-3 text-sm text-blue-400 hover:text-blue-300">Send test email</button>
+        <p class="text-xs text-[var(--figma-text-muted)] mb-2">Configure EmailJS to enable email sending.</p>
+        <div class="mb-2"><label class="text-[var(--figma-text-muted)] text-xs block mb-0.5">Test email address</label><input type="email" id="emailjsTestTo" placeholder="you@example.com" class="w-full bg-[var(--figma-border)] border border-[var(--figma-border)] rounded-[var(--figma-radius)] px-3 py-2 text-[var(--figma-text)] text-sm placeholder-[var(--figma-text-muted)] focus:outline-none focus:ring-1 focus:ring-[var(--figma-blue-accent)]"></div>
+        <button id="testEmailBtn" class="text-sm text-[var(--figma-blue-accent)] hover:underline">Send test email</button>
       </div>
+    </div>
+
+    <!-- Maintenance Tickets -->
+    <div class="dashboard-card">
+      <div class="flex items-center justify-between flex-wrap gap-4 mb-4">
+        <div>
+          <h2 class="text-lg font-semibold flex items-center gap-2 text-[var(--figma-text)]">
+            <i class="fas fa-wrench text-[var(--figma-blue-accent)]"></i>
+            Maintenance Tickets
+          </h2>
+          <p class="text-[var(--figma-text-muted)] text-sm mt-1">Manual and auto-generated service requests</p>
+        </div>
+        <button id="createTicketBtn" class="flex items-center gap-2 px-4 py-2.5 bg-[#3B82F6] hover:opacity-90 text-white rounded-[var(--figma-radius)] font-medium text-sm transition">
+          <i class="fas fa-wrench"></i> Create Ticket
+        </button>
+      </div>
+      <div id="criticalDurationPanel" class="rounded-[var(--figma-radius)] p-4 mb-4 bg-[var(--figma-red)]/20 border border-[var(--figma-red)] flex flex-wrap items-center justify-between gap-4">
+        <div class="flex items-center gap-3">
+          <i class="fas fa-clock text-white text-xl"></i>
+          <div>
+            <div class="text-white font-medium">Critical Temperature Duration</div>
+            <div class="text-white/80 text-sm">Auto-ticket at 1:30</div>
+          </div>
+        </div>
+        <div class="flex items-center gap-4">
+          <div class="text-right">
+            <div id="criticalDurationEl" class="text-2xl font-bold text-white">0:00</div>
+            <div id="criticalDurationRemaining" class="text-sm text-white/80">90s remaining</div>
+          </div>
+        </div>
+        <div class="w-full mt-2">
+          <div class="h-2 bg-[var(--figma-red)]/30 rounded-full overflow-hidden">
+            <div id="criticalDurationBar" class="h-full bg-[var(--figma-red)] rounded-full transition-all duration-300" style="width: 0%"></div>
+          </div>
+        </div>
+      </div>
+      <div class="grid grid-cols-3 gap-4 mb-4">
+        <div class="bg-[var(--figma-border)]/50 border border-[var(--figma-border)] rounded-[var(--figma-radius)] p-3">
+          <div class="text-[var(--figma-text-muted)] text-sm">Total Tickets</div>
+          <div id="statTotalTickets" class="text-xl font-bold text-[var(--figma-orange)]">0</div>
+        </div>
+        <div class="bg-[var(--figma-border)]/50 border border-[var(--figma-border)] rounded-[var(--figma-radius)] p-3">
+          <div class="text-[var(--figma-text-muted)] text-sm">Open Tickets</div>
+          <div id="statOpenTickets" class="text-xl font-bold text-[var(--figma-orange)]">0</div>
+        </div>
+        <div class="bg-[var(--figma-border)]/50 border border-[var(--figma-border)] rounded-[var(--figma-radius)] p-3">
+          <div class="text-[var(--figma-text-muted)] text-sm">Auto-Generated</div>
+          <div id="statAutoTickets" class="text-xl font-bold text-[var(--figma-red)]">0</div>
+        </div>
+      </div>
+      <div id="ticketsList" class="space-y-3"></div>
+      <div id="ticketsEmpty" class="text-center py-12 text-[var(--figma-text-muted)]">
+        <i class="fas fa-wrench text-4xl mb-3 opacity-50"></i>
+        <div class="font-medium text-[var(--figma-text)]">No maintenance tickets yet</div>
+        <div class="text-sm mt-1">Tickets will be created manually or automatically when critical</div>
+      </div>
+    </div>
+
+    <!-- Overheat Risk Prediction -->
+    <div class="dashboard-card">
+      <h2 class="text-lg font-semibold flex items-center gap-2 mb-4 text-[var(--figma-text)]">
+        <i class="fas fa-exclamation-triangle text-[var(--figma-orange)]"></i>
+        Overheat Risk Prediction
+      </h2>
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
+        <div class="lg:col-span-2">
+          <div class="text-[var(--figma-text)] text-sm mb-0.5">Risk Score</div>
+          <div class="flex items-baseline gap-2 mb-1">
+            <span id="overheatRiskScore" class="text-3xl font-bold text-[var(--figma-green)]">0%</span>
+            <span id="overheatRiskLabel" class="text-sm font-medium text-[var(--figma-green)]">NORMAL</span>
+          </div>
+          <div id="overheatStableMsg" class="hidden text-sm text-[var(--figma-green)] mb-1 flex items-center gap-1"><i class="fas fa-check-circle"></i> Temperature stable or decreasing</div>
+          <div class="h-2 bg-[var(--figma-border)] rounded-full overflow-hidden">
+            <div id="overheatRiskBar" class="h-full rounded-full bg-[var(--figma-green)] transition-all duration-500" style="width: 0%"></div>
+          </div>
+        </div>
+        <div>
+          <div class="text-[var(--figma-text-muted)] text-sm mb-0.5">Estimated Time to Overheat</div>
+          <div id="overheatTime" class="text-xl font-bold text-[var(--figma-text)]">—</div>
+        </div>
+      </div>
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+        <div class="bg-[var(--figma-border)]/50 border border-[var(--figma-border)] rounded-[var(--figma-radius)] p-3">
+          <div class="text-[var(--figma-text-muted)] text-xs mb-1 flex items-center gap-1"><i class="fas fa-chart-line text-[var(--figma-blue-accent)]"></i> Temp Rate</div>
+          <div id="overheatTempRate" class="text-[var(--figma-text)] font-medium">+0.0°C/min</div>
+        </div>
+        <div class="bg-[var(--figma-border)]/50 border border-[var(--figma-border)] rounded-[var(--figma-radius)] p-3">
+          <div class="text-[var(--figma-text-muted)] text-xs mb-1 flex items-center gap-1"><i class="fas fa-cog text-[var(--figma-blue-accent)]"></i> Pump Load</div>
+          <div id="overheatPumpLoad" class="text-pump font-medium">0%</div>
+        </div>
+        <div class="bg-[var(--figma-border)]/50 border border-[var(--figma-border)] rounded-[var(--figma-radius)] p-3">
+          <div class="text-[var(--figma-text-muted)] text-xs mb-1 flex items-center gap-1"><i class="fas fa-tachometer-alt text-[var(--figma-blue-accent)]"></i> Pressure</div>
+          <div id="overheatPressure" class="text-[var(--figma-text)] font-medium">0 PSI</div>
+        </div>
+        <div class="bg-[var(--figma-border)]/50 border border-[var(--figma-border)] rounded-[var(--figma-radius)] p-3">
+          <div class="text-[var(--figma-text-muted)] text-xs mb-1 flex items-center gap-1"><i class="fas fa-thermometer-half text-[var(--figma-blue-accent)]"></i> Current Temp</div>
+          <div id="overheatCurrentTemp" class="text-[var(--figma-text)] font-medium">0°C</div>
+        </div>
+      </div>
+      <div id="overheatAlertBox" class="hidden rounded-[var(--figma-radius)] p-3 mb-4 bg-[var(--figma-orange)]/20 border border-[var(--figma-orange)] flex items-start gap-2">
+        <i class="fas fa-exclamation-triangle text-[var(--figma-orange)] mt-0.5"></i>
+        <p class="text-[var(--figma-text)] text-sm" id="overheatAlertText">Elevated risk detected. Monitor closely and prepare for potential intervention.</p>
+      </div>
+      <div class="bg-[var(--figma-border)]/30 border border-[var(--figma-border)] rounded-[var(--figma-radius)] p-4">
+        <div class="text-[var(--figma-text)] font-medium mb-2 flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-[var(--figma-orange)]"></span> System Response</div>
+        <ul class="text-sm text-[var(--figma-text-muted)] space-y-1 list-none pl-0">
+          <li class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full bg-[var(--figma-orange)] flex-shrink-0"></span> Reduce pump load to 40%</li>
+          <li class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full bg-[var(--figma-orange)] flex-shrink-0"></span> Activate cooling protocol</li>
+          <li class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full bg-[var(--figma-orange)] flex-shrink-0"></span> Send maintenance alert</li>
+          <li class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full bg-[var(--figma-orange)] flex-shrink-0"></span> Log incident report</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Failure Prediction -->
+    <div class="dashboard-card">
+      <h2 class="text-lg font-semibold flex items-center gap-2 mb-4 text-[var(--figma-text)]">
+        <i class="fas fa-exclamation-triangle text-[var(--figma-orange)]"></i>
+        Failure Prediction
+      </h2>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div class="bg-[var(--figma-border)]/30 border border-[var(--figma-orange)] rounded-[var(--figma-radius)] p-4">
+          <div class="text-[var(--figma-text-muted)] text-sm mb-1 flex items-center gap-1"><i class="fas fa-chart-line text-[var(--figma-orange)]"></i> Failure Probability</div>
+          <div id="failureProb" class="text-2xl font-bold text-[var(--figma-orange)]">0%</div>
+          <div class="h-1.5 bg-[var(--figma-border)] rounded-full mt-2 overflow-hidden">
+            <div id="failureProbBar" class="h-full rounded-full bg-[var(--figma-orange)] transition-all duration-500" style="width: 0%"></div>
+          </div>
+        </div>
+        <div class="bg-[var(--figma-border)]/30 border border-[var(--figma-orange)] rounded-[var(--figma-radius)] p-4">
+          <div class="text-[var(--figma-text-muted)] text-sm mb-1 flex items-center gap-1"><i class="fas fa-clock text-[var(--figma-orange)]"></i> Est. Time to Failure</div>
+          <div id="failureTime" class="text-2xl font-bold text-[var(--figma-orange)]">—</div>
+          <div class="text-[var(--figma-text-muted)] text-xs mt-1">Based on current trends.</div>
+        </div>
+        <div class="bg-[var(--figma-border)]/30 border border-[var(--figma-orange)] rounded-[var(--figma-radius)] p-4">
+          <div class="text-[var(--figma-text-muted)] text-sm mb-1">Confidence Level</div>
+          <div id="failureConfidence" class="text-2xl font-bold text-[var(--figma-blue-accent)]">—</div>
+          <div class="flex items-center gap-2 mt-2">
+            <div class="flex-1 h-1.5 bg-[var(--figma-border)] rounded-full overflow-hidden">
+              <div id="failureConfidenceBar" class="h-full rounded-full bg-[var(--figma-blue-accent)] transition-all duration-500" style="width: 0%"></div>
+            </div>
+            <span id="failureConfidencePct" class="text-xs text-[var(--figma-text-muted)]">0%</span>
+          </div>
+        </div>
+      </div>
+      <div class="mb-4">
+        <div class="text-[var(--figma-text)] font-medium mb-2">Calculation Factors</div>
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-2 text-sm text-[var(--figma-text-muted)]">
+          <div>Temperature: <span id="factorTemp" class="text-[var(--figma-blue-accent)]">0°C</span> <span class="opacity-80">/ Weight: 40%</span></div>
+          <div>Temp Rate: <span id="factorTempRate" class="text-[var(--figma-blue-accent)]">0°/min</span> <span class="opacity-80">/ Weight: 30%</span></div>
+          <div>Pump Load: <span id="factorPumpLoad" class="text-pump">0%</span> <span class="opacity-80">/ Weight: 20%</span></div>
+          <div>Pressure: <span id="factorPressure" class="text-[var(--figma-blue-accent)]">0 PSI</span> <span class="opacity-80">/ Weight: 10%</span></div>
+        </div>
+      </div>
+      <div class="bg-[var(--figma-border)]/30 border border-[var(--figma-border)] rounded-[var(--figma-radius)] p-4">
+        <div class="text-[var(--figma-text)] font-medium mb-2">Historical Trend Analysis</div>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm text-[var(--figma-text-muted)]">
+          <div><span>Trend Rate:</span> <span id="trendRate" class="text-[var(--figma-text)]">+0.00°C/min</span><div class="text-xs opacity-80">Based on last 30 readings</div></div>
+          <div><span>Acceleration:</span> <span id="trendAccel" class="text-[var(--figma-text)]">+0.00°/min²</span><div class="text-xs opacity-80">Rate of change</div></div>
+          <div><span>Data Points:</span> <span id="trendDataPoints" class="text-[var(--figma-text)]">0</span><div class="text-xs opacity-80">Total readings available</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="dashboard-card grid grid-cols-1 md:grid-cols-3 gap-6 text-sm">
+      <div><div class="text-[var(--figma-text-muted)] mb-0.5">Last Updated</div><div id="footerLastUpdated" class="text-[var(--figma-text)] font-mono">—</div></div>
+      <div><div class="text-[var(--figma-text-muted)] mb-0.5">Data Points</div><div id="footerDataPoints" class="text-[var(--figma-text)] font-mono">0</div></div>
+      <div><div class="text-[var(--figma-text-muted)] mb-0.5">Monitoring Status</div><div id="footerMonitoringStatus" class="text-[var(--figma-text)] font-mono">Active</div></div>
     </div>
   </div>
 
+  <div id="toastContainer" class="toast-container"></div>
   <script src="script.js"></script>
 </body>
 </html>
