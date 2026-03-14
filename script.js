@@ -89,6 +89,9 @@
   let ticketIdCounter = 1;
   let emailSentForCurrentCriticalEvent = false;
   
+  // Sorting system
+  let currentSortMode = 'pipe'; // 'pipe', 'temp', 'risk'
+  
   // Workflow system
   let workflowTickets = [];
   let workflowIdCounter = 1;
@@ -289,11 +292,14 @@
     const statusLabel = status === 'normal' ? 'NORMAL' : status === 'warning' ? 'WARNING' : 'CRITICAL';
     statusDot.className = 'w-2 h-2 rounded-full ' +
       (status === 'normal' ? 'bg-[var(--figma-green)]' : status === 'warning' ? 'bg-[var(--figma-orange)]' : 'bg-[var(--figma-red)]');
-    var liveDotEl = statusText.nextElementSibling;
-    var liveTextEl = liveDotEl && liveDotEl.nextElementSibling;
+    var liveDotEl = document.getElementById('liveDot');
+    var liveTextEl = document.getElementById('liveText');
     statusText.textContent = 'System Status: ' + statusLabel;
-    if (liveDotEl) liveDotEl.className = 'w-1.5 h-1.5 rounded-full ' + (paused ? 'bg-[var(--figma-text-muted)]' : (status === 'normal' ? 'bg-[var(--figma-green)]' : status === 'warning' ? 'bg-[var(--figma-orange)]' : 'bg-[var(--figma-red)]'));
-    if (liveTextEl) liveTextEl.textContent = paused ? 'Paused' : 'Live';
+    if (liveDotEl) liveDotEl.className = 'w-1.5 h-1.5 rounded-full ' + (paused ? 'bg-[var(--figma-text-muted)]' : 'bg-[var(--figma-green)]');
+    if (liveTextEl) {
+      liveTextEl.textContent = paused ? 'Paused' : 'Live';
+      liveTextEl.className = (paused ? 'text-[var(--figma-text-muted)]' : 'text-[var(--figma-green)]') + ' text-sm';
+    }
 
     if (emailEnabled && emailEnabled.checked && !paused) {
       if (status === 'warning' && !emailSentWarning) {
@@ -330,12 +336,44 @@
     updateOverheatRisk();
     updateFailurePrediction();
     updatePipeCards();
+    updateSelectedPipeHeader();
+    updateTicketsUI(); // Update ticket sorting when pipe data changes
     var footerUpdated = document.getElementById('footerLastUpdated');
     var footerPoints = document.getElementById('footerDataPoints');
     var footerStatus = document.getElementById('footerMonitoringStatus');
     if (footerUpdated) footerUpdated.textContent = new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true });
     if (footerPoints) footerPoints.textContent = tempHistory.length;
     if (footerStatus) footerStatus.textContent = paused ? 'Paused' : 'Active';
+  }
+
+  function sortTickets(ticketsArray, sortMode) {
+    const sorted = [...ticketsArray];
+    
+    switch (sortMode) {
+      case 'pipe':
+        return sorted.sort((a, b) => a.pipeId.localeCompare(b.pipeId));
+      case 'temp':
+        return sorted.sort((a, b) => {
+          const tempA = pipesData[a.pipeId] ? pipesData[a.pipeId].temp : a.temperature;
+          const tempB = pipesData[b.pipeId] ? pipesData[b.pipeId].temp : b.temperature;
+          return tempB - tempA; // Descending (highest first)
+        });
+      case 'risk':
+        return sorted.sort((a, b) => {
+          const riskA = a.riskScore || 0;
+          const riskB = b.riskScore || 0;
+          return riskB - riskA; // Descending (highest first)
+        });
+      default:
+        return sorted;
+    }
+  }
+
+  function updateSelectedPipeHeader() {
+    const headerEl = document.getElementById('selectedPipeName');
+    if (headerEl) {
+      headerEl.textContent = selectedPipeId;
+    }
   }
 
   function updatePipeCards() {
@@ -381,6 +419,7 @@
     container.querySelectorAll('.pipe-card').forEach(card => {
       card.addEventListener('click', function() {
         selectedPipeId = this.getAttribute('data-pipe-id');
+        updateSelectedPipeHeader();
         updateDisplay();
         updateChart();
       });
@@ -702,6 +741,7 @@
     
     tickets.push(ticket);
     updateTicketsUI();
+    updateSortButtons(); // Update sorting when new ticket is created
     
     // Create corresponding workflow ticket
     createWorkflowTicket(ticket);
@@ -725,7 +765,11 @@
     }
     if (emptyEl) emptyEl.classList.add('hidden');
     if (!listEl) return;
-    listEl.innerHTML = tickets.slice().reverse().map(function (t) {
+    
+    // Apply sorting
+    const sortedTickets = sortTickets(tickets, currentSortMode);
+    
+    listEl.innerHTML = sortedTickets.slice().reverse().map(function (t) {
       const timeStr = new Date(t.createdAt).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
       const statusBtn = t.status === 'open' ? 'Mark Closed' : 'Reopen';
       const tktId = formatTicketId(t);
@@ -1526,6 +1570,45 @@
     showToast('Manual maintenance ticket created.', 'success');
   });
 
+  // Sorting button event listeners
+  function updateSortButtons() {
+    const sortPipe = document.getElementById('sortPipe');
+    const sortTemp = document.getElementById('sortTemp');
+    const sortRisk = document.getElementById('sortRisk');
+    
+    if (sortPipe && sortTemp && sortRisk) {
+      // Reset all buttons
+      [sortPipe, sortTemp, sortRisk].forEach(btn => {
+        btn.className = 'sort-btn px-3 py-1.5 text-sm bg-transparent text-[var(--figma-text-muted)] hover:bg-[var(--figma-border)]';
+      });
+      
+      // Highlight active button
+      const activeBtn = currentSortMode === 'pipe' ? sortPipe : 
+                        currentSortMode === 'temp' ? sortTemp : sortRisk;
+      if (activeBtn) {
+        activeBtn.className = 'sort-btn px-3 py-1.5 text-sm bg-[#3B82F6] text-white';
+      }
+    }
+  }
+
+  document.getElementById('sortPipe').addEventListener('click', function () {
+    currentSortMode = 'pipe';
+    updateSortButtons();
+    updateTicketsUI();
+  });
+
+  document.getElementById('sortTemp').addEventListener('click', function () {
+    currentSortMode = 'temp';
+    updateSortButtons();
+    updateTicketsUI();
+  });
+
+  document.getElementById('sortRisk').addEventListener('click', function () {
+    currentSortMode = 'risk';
+    updateSortButtons();
+    updateTicketsUI();
+  });
+
   // Initialize all pipes with some history
   pipeIds.forEach(pipeId => {
     const pipeData = pipesData[pipeId];
@@ -1566,6 +1649,7 @@
   updateChart();
   updateCriticalDurationUI(0, false);
   updateTicketsUI();
+  updateSortButtons(); // Initialize sort buttons
   updateInterval = setInterval(tick, UPDATE_MS);
 
   [document.getElementById('emailjsServiceId'), document.getElementById('emailjsTemplateId'), document.getElementById('emailjsPublicKey')].forEach(function (input) {
