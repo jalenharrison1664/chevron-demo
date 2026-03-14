@@ -1,0 +1,115 @@
+import { AlertTriangle, AlertCircle, CheckCircle } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+
+interface AlertPanelProps {
+  severity: 'normal' | 'warning' | 'critical';
+  temperature: number;
+  unit: 'C' | 'F';
+}
+
+export function AlertPanel({ severity, temperature, unit }: AlertPanelProps) {
+  // Convert temperature for display
+  const displayTemp = unit === 'F' ? (temperature * 9/5) + 32 : temperature;
+  
+  // Convert thresholds for display
+  const safeMax = unit === 'F' ? 167 : 75;      // 75°C = 167°F
+  const warningMin = unit === 'F' ? 169 : 76;    // 76°C = 169°F
+  const warningMax = unit === 'F' ? 203 : 95;    // 95°C = 203°F
+  const criticalMin = unit === 'F' ? 205 : 96;   // 96°C = 205°F
+  const criticalThreshold = unit === 'F' ? 203 : 95; // For "Critical at" message
+
+  const alerts = {
+    normal: {
+      icon: CheckCircle,
+      title: 'System Normal',
+      message: 'Pipe temperature is within safe operating range.',
+      bgColor: 'bg-green-500/10',
+      borderColor: 'border-green-500/50',
+      textColor: 'text-green-500',
+    },
+    warning: {
+      icon: AlertTriangle,
+      title: 'Warning: Elevated Temperature',
+      message: 'Pipe temperature is approaching critical levels. Monitor closely and prepare for intervention.',
+      bgColor: 'bg-amber-500/10',
+      borderColor: 'border-amber-500/50',
+      textColor: 'text-amber-500',
+    },
+    critical: {
+      icon: AlertCircle,
+      title: 'CRITICAL: High Temperature Alert',
+      message: 'Pipe temperature has exceeded safe limits! Immediate action required to prevent system damage.',
+      bgColor: 'bg-red-500/10',
+      borderColor: 'border-red-500/50',
+      textColor: 'text-red-500',
+    },
+  };
+
+  const alert = alerts[severity];
+  const Icon = alert.icon;
+
+  return (
+    <div className="space-y-4">
+      <h3 className="text-xl text-white">Status Alerts</h3>
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={severity}
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: 20 }}
+          className={`p-6 rounded-xl border-2 ${alert.bgColor} ${alert.borderColor}`}
+        >
+          <div className="flex items-start gap-4">
+            <motion.div
+              animate={{
+                scale: severity === 'critical' ? [1, 1.2, 1] : 1,
+                rotate: severity === 'critical' ? [0, 5, -5, 0] : 0,
+              }}
+              transition={{
+                duration: 0.5,
+                repeat: severity === 'critical' ? Infinity : 0,
+              }}
+            >
+              <Icon className={`size-8 ${alert.textColor}`} />
+            </motion.div>
+            <div className="flex-1">
+              <h4 className={`font-semibold text-lg ${alert.textColor} mb-2`}>
+                {alert.title}
+              </h4>
+              <p className="text-gray-300">
+                {alert.message}
+              </p>
+              <div className="mt-4 flex gap-4 text-sm">
+                <div>
+                  <span className="text-gray-400">Current: </span>
+                  <span className={`font-mono ${alert.textColor}`}>{displayTemp.toFixed(1)}°{unit}</span>
+                </div>
+                {severity === 'warning' && (
+                  <div>
+                    <span className="text-gray-400">Critical at: </span>
+                    <span className="font-mono text-red-500">{criticalThreshold.toFixed(1)}°{unit}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </motion.div>
+      </AnimatePresence>
+
+      <div className="grid grid-cols-3 gap-4">
+        <div className="p-4 bg-gray-900 rounded-lg border border-gray-800">
+          <div className="text-sm text-gray-400 mb-1">Safe Range</div>
+          <div className="text-green-500 font-mono">0 - {safeMax}°{unit}</div>
+        </div>
+        <div className="p-4 bg-gray-900 rounded-lg border border-gray-800">
+          <div className="text-sm text-gray-400 mb-1">Warning Range</div>
+          <div className="text-amber-500 font-mono">{warningMin} - {warningMax}°{unit}</div>
+        </div>
+        <div className="p-4 bg-gray-900 rounded-lg border border-gray-800">
+          <div className="text-sm text-gray-400 mb-1">Critical Range</div>
+          <div className="text-red-500 font-mono">{criticalMin}°{unit}+</div>
+        </div>
+      </div>
+    </div>
+  );
+}
