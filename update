@@ -1,0 +1,254 @@
+import { useState, useEffect, useRef } from 'react';
+import { TemperatureGauge } from './components/TemperatureGauge';
+import { TemperatureChart } from './components/TemperatureChart';
+import { AlertPanel } from './components/AlertPanel';
+import { ExportControls } from './components/ExportControls';
+import { EmailNotifications } from './components/EmailNotifications';
+import { RiskModel } from './components/RiskModel';
+import { FailurePrediction } from './components/FailurePrediction';
+import { Activity } from 'lucide-react';
+import { Toaster } from 'sonner';
+
+interface DataPoint {
+  time: string;
+  temperature: number;
+  id: number;
+}
+
+function App() {
+  const [temperature, setTemperature] = useState(65);
+  const [history, setHistory] = useState<DataPoint[]>([]);
+  const [isMonitoring, setIsMonitoring] = useState(true);
+  const [autoExport, setAutoExport] = useState(false);
+  const [exportInterval, setExportInterval] = useState(5);
+  const [exportFormat, setExportFormat] = useState<'txt' | 'csv' | 'html'>('txt');
+  const [unit, setUnit] = useState<'C' | 'F'>('C');
+  const [pumpLoad, setPumpLoad] = useState(45);
+  const [pressure, setPressure] = useState(50);
+  const [tempIncreaseRate, setTempIncreaseRate] = useState(0);
+  const exportTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const getSeverity = (temp: number): 'normal' | 'warning' | 'critical' => {
+    if (temp >= 95) return 'critical';
+    if (temp >= 75) return 'warning';
+    return 'normal';
+  };
+
+  // Calculate temperature increase rate from history
+  useEffect(() => {
+    if (history.length < 5) {
+      setTempIncreaseRate(0);
+      return;
+    }
+    
+    // Calculate rate from last 5 data points (10 seconds)
+    const recent = history.slice(-5);
+    const tempDiff = recent[recent.length - 1].temperature - recent[0].temperature;
+    const timeDiffMinutes = (5 * 2) / 60; // 5 readings * 2 seconds per reading / 60
+    const rate = tempDiff / timeDiffMinutes;
+    
+    setTempIncreaseRate(rate);
+  }, [history]);
+
+  useEffect(() => {
+    if (!isMonitoring) return;
+
+    const interval = setInterval(() => {
+      setTemperature((prevTemp) => {
+        // Simulate temperature changes with some randomness
+        const change = (Math.random() - 0.5) * 8;
+        const newTemp = Math.max(20, Math.min(120, prevTemp + change));
+        
+        // Add occasional spikes to simulate real-world scenarios
+        const shouldSpike = Math.random() < 0.1;
+        const finalTemp = shouldSpike ? newTemp + Math.random() * 15 : newTemp;
+        
+        return Math.max(20, Math.min(120, finalTemp));
+      });
+      
+      // Simulate pump load changes (correlated with temperature)
+      setPumpLoad((prevLoad) => {
+        const tempFactor = temperature / 100; // Higher temp = higher load tendency
+        const change = (Math.random() - 0.4) * 10 + tempFactor * 5;
+        return Math.max(20, Math.min(100, prevLoad + change));
+      });
+      
+      // Simulate pressure changes (based on temperature and temp rate)
+      setPressure((prevPressure) => {
+        const tempFactor = temperature / 100; // Higher temp = higher pressure
+        const rateFactor = Math.max(0, tempIncreaseRate / 5); // Positive rate increases pressure
+        const change = (Math.random() - 0.4) * 8 + tempFactor * 6 + rateFactor * 8;
+        return Math.max(30, Math.min(100, prevPressure + change));
+      });
+    }, 10000); // Update every 10 seconds
+
+    return () => clearInterval(interval);
+  }, [isMonitoring, temperature, pumpLoad, tempIncreaseRate]);
+
+  useEffect(() => {
+    const now = new Date();
+    const timeString = now.toLocaleTimeString('en-US', { 
+      hour: '2-digit', 
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: true 
+    });
+
+    setHistory((prev) => {
+      const newHistory = [...prev, { time: timeString, temperature, id: Date.now() }];
+      // Keep last 100 data points for better export data
+      return newHistory.slice(-100);
+    });
+  }, [temperature]);
+
+  // Auto-export functionality
+  useEffect(() => {
+    if (exportTimerRef.current) {
+      clearInterval(exportTimerRef.current);
+    }
+
+    if (autoExport && history.length > 0) {
+      exportTimerRef.current = setInterval(() => {
+        // Trigger export - we'll pass this function to ExportControls
+        const event = new CustomEvent('autoExport');
+        window.dispatchEvent(event);
+      }, exportInterval * 60 * 1000);
+    }
+
+    return () => {
+      if (exportTimerRef.current) {
+        clearInterval(exportTimerRef.current);
+      }
+    };
+  }, [autoExport, exportInterval, history.length]);
+
+  const severity = getSeverity(temperature);
+
+  // Store data on window for export functionality
+  useEffect(() => {
+    (window as any).__tempHistory = history;
+    (window as any).__currentTemp = temperature;
+    (window as any).__currentSeverity = severity;
+  }, [history, temperature, severity]);
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-gray-950 via-gray-900 to-gray-950">
+      <Toaster position="top-right" richColors />
+      <div className="container mx-auto px-4 py-8 max-w-7xl">
+        {/* Header */}
+        <div className="mb-8">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <Activity className="size-10 text-blue-500" />
+              <div>
+                <h1 className="text-4xl text-white">Pipe Temperature Monitor</h1>
+                <p className="text-gray-400 mt-1">Real-time temperature monitoring and alert system</p>
+              </div>
+            </div>
+            <button
+              onClick={() => setIsMonitoring(!isMonitoring)}
+              className={`px-6 py-3 rounded-lg font-medium transition-colors ${
+                isMonitoring 
+                  ? 'bg-red-500 hover:bg-red-600 text-white' 
+                  : 'bg-green-500 hover:bg-green-600 text-white'
+              }`}
+            >
+              {isMonitoring ? 'Pause Monitoring' : 'Resume Monitoring'}
+            </button>
+          </div>
+          
+          {/* Status Indicator */}
+          <div className="flex items-center gap-2">
+            <div className={`size-3 rounded-full ${
+              severity === 'critical' ? 'bg-red-500 animate-pulse' : 
+              severity === 'warning' ? 'bg-amber-500 animate-pulse' : 
+              'bg-green-500'
+            }`} />
+            <span className="text-gray-300">
+              System Status: <span className={`font-semibold ${
+                severity === 'critical' ? 'text-red-500' : 
+                severity === 'warning' ? 'text-amber-500' : 
+                'text-green-500'
+              }`}>
+                {severity.toUpperCase()}
+              </span>
+            </span>
+            {isMonitoring && (
+              <span className="ml-4 text-gray-400 text-sm">● Live</span>
+            )}
+          </div>
+        </div>
+
+        {/* Main Content */}
+        <div className="grid lg:grid-cols-2 gap-8 mb-8">
+          <TemperatureGauge temperature={temperature} severity={severity} unit={unit} setUnit={setUnit} />
+          <div className="p-8 bg-gray-900 rounded-2xl border border-gray-800">
+            <AlertPanel severity={severity} temperature={temperature} unit={unit} />
+          </div>
+        </div>
+
+        {/* Chart */}
+        <TemperatureChart data={history} />
+
+        {/* Export and Email Controls Grid */}
+        <div className="mt-8 grid lg:grid-cols-2 gap-8">
+          <ExportControls
+            autoExport={autoExport}
+            setAutoExport={setAutoExport}
+            exportInterval={exportInterval}
+            setExportInterval={setExportInterval}
+            exportFormat={exportFormat}
+            setExportFormat={setExportFormat}
+          />
+          
+          <EmailNotifications 
+            currentTemp={temperature}
+            severity={severity}
+          />
+        </div>
+
+        {/* Risk Model */}
+        <div className="mt-8">
+          <RiskModel
+            currentTemp={temperature}
+            pumpLoad={pumpLoad}
+            pressure={pressure}
+            tempIncreaseRate={tempIncreaseRate}
+            unit={unit}
+          />
+        </div>
+
+        {/* Failure Prediction */}
+        <div className="mt-8">
+          <FailurePrediction
+            currentTemp={temperature}
+            pumpLoad={pumpLoad}
+            pressure={pressure}
+            tempIncreaseRate={tempIncreaseRate}
+            unit={unit}
+          />
+        </div>
+
+        {/* Footer Info */}
+        <div className="mt-8 p-6 bg-gray-900 rounded-xl border border-gray-800">
+          <div className="grid md:grid-cols-3 gap-6 text-sm">
+            <div>
+              <div className="text-gray-400 mb-1">Last Updated</div>
+              <div className="text-white font-mono">{new Date().toLocaleTimeString()}</div>
+            </div>
+            <div>
+              <div className="text-gray-400 mb-1">Data Points</div>
+              <div className="text-white font-mono">{history.length}</div>
+            </div>
+            <div>
+              <div className="text-gray-400 mb-1">Monitoring Status</div>
+              <div className="text-white font-mono">{isMonitoring ? 'Active' : 'Paused'}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default App;
