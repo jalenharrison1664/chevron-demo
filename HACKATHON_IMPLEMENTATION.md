@@ -9,7 +9,62 @@
 - **Act** – Automatically create maintenance work order(s); stronger: update **two** systems (e.g. work order + status/inventory).
 - **Explain** – Clear summary: what was detected, what decision was made, what action was taken.
 
-**AI requirement:** Use AI in at least one meaningful step (e.g. “Is this a dangerous trend?”, “What maintenance action should be created?”, or generate the technician report).
+**AI requirement:** Use AI in at least one meaningful step (e.g. "Is this a dangerous trend?", "What maintenance action should be created?", or generate the technician report).
+
+---
+
+## Autonomous Monitoring Workflow Implementation
+
+### Architecture Overview
+
+**Sensor Layer → Monitoring Dashboard → Maintenance API**
+
+The system implements a complete autonomous monitoring workflow:
+
+#### **Detect**
+Sensors monitor temperature, pressure, pump load, and flow rate across multiple pipes:
+- **Temperature Monitoring:** Real-time temperature tracking with historical data
+- **Multi-Pipe Support:** Independent sensors for PIPE-A1 through PIPE-F6
+- **Derived Metrics:** Pump load and pressure calculations based on temperature trends
+- **Data Collection:** Continuous telemetry with timestamped readings
+
+#### **Decide**
+A weighted risk model evaluates overheating risk using:
+- **Temperature (40%)**: Current temperature severity
+- **Temperature Rate (30%)**: Rate of temperature change
+- **Pump Load (20%)**: System operational load
+- **Pressure (10%)**: System pressure levels
+
+**Severity Classification:**
+- **Normal:** 0-75°C
+- **Warning:** 76-95°C  
+- **Critical:** 95°C+
+
+#### **Act**
+When critical thresholds are exceeded the system automatically generates maintenance tickets referencing the affected pipe:
+- **Ticket Creation:** Automated maintenance ticket generation via external API
+- **Pipe-Specific Actions:** Each ticket references the specific pipe (PIPE-A1, etc.)
+- **Risk Assessment:** Tickets include temperature, risk score, and severity level
+- **API Integration:** Mock API simulates external maintenance system communication
+
+**Ticket Structure:**
+```
+Ticket #TCK-001
+Pipe: PIPE-D4
+Issue: Critical Temperature
+Temperature: 102.3°C
+Risk Score: 81%
+Time: 10:52:14 PM
+Status: OPEN
+Auto Generated
+```
+
+#### **Explain**
+The dashboard presents the system decision, predicted failure time, and recommended response actions:
+- **Failure Prediction:** Time-to-failure estimates with intelligent formatting
+- **System Response:** Automated response recommendations (reduce load, increase monitoring, etc.)
+- **Visual Indicators:** Enhanced UI with critical glow effects and status indicators
+- **Audit Trail:** Complete ticket history with timestamps and resolution status
 
 ---
 
@@ -17,13 +72,13 @@
 
 | Challenge step | Your app today |
 |----------------|-----------------|
-| **Detect** | ✅ Simulated sensor data (temperature); history and spikes. |
-| **Decide** | ✅ Severity from thresholds (Normal / Warning / Critical). |
-| **Act** | ❌ No automatic maintenance work order; no second system. |
-| **Explain** | ❌ No single “what happened” summary. |
-| **AI** | ❌ No AI in the loop (could add for Decide or Explain). |
+| **Detect** | ✅ Multi-pipe sensor data (temperature, pressure, pump load, flow rate); history and spikes. |
+| **Decide** | ✅ Weighted risk model with severity thresholds (Normal / Warning / Critical). |
+| **Act** | ✅ Automatic maintenance ticket creation via API; pipe-specific referencing. |
+| **Explain** | ✅ Clear summaries with failure prediction, system response, and visual indicators. |
+| **AI** | ⚠️ Risk prediction model (algorithmic AI); ready for LLM integration. |
 
-So you already have **Detect** and **Decide**. You need to add **Act** (and ideally a second system) and **Explain**, and plug in **AI** in at least one step.
+The system now implements the complete **Detect → Decide → Act → Explain** workflow with pipe-specific monitoring and automated maintenance ticket generation.
 
 ---
 

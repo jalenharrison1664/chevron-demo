@@ -1,3 +1,21 @@
+/**
+ * Pipe Temperature Monitoring Dashboard
+ * 
+ * Architecture: Sensor Layer → Monitoring Dashboard → Maintenance API
+ * 
+ * This dashboard monitors multiple industrial pipes for temperature anomalies
+ * and automatically generates maintenance tickets when critical thresholds are exceeded.
+ * 
+ * System Components:
+ * - Multi-pipe temperature monitoring with independent sensors
+ * - Weighted risk prediction model (40% temp, 30% rate, 20% pump, 10% pressure)
+ * - Automated maintenance ticket generation via external API
+ * - Real-time alerts and system response recommendations
+ * 
+ * The dashboard communicates with a simulated maintenance API for ticket creation,
+ * allowing the system to demonstrate real-world API integration patterns
+ * while remaining fully deployable on GitHub Pages.
+ */
 (function () {
   const SAFE_MAX = 75;
   const WARNING_MAX = 95;
@@ -233,7 +251,7 @@
       (status === 'normal' ? 'bg-[var(--figma-green)]' : status === 'warning' ? 'bg-[var(--figma-orange)]' : 'bg-[var(--figma-red)]');
 
     alertBox.className = 'rounded-[var(--figma-radius)] p-4 mb-4 border ' +
-      (status === 'normal' ? 'bg-[var(--figma-green)]/10 border-[var(--figma-green)]/30' : status === 'warning' ? 'bg-[var(--figma-orange)]/20 border-[var(--figma-orange)]' : 'bg-[var(--figma-red)]/20 border-[var(--figma-red)] pulse-critical');
+      (status === 'normal' ? 'bg-[var(--figma-green)]/10 border-[var(--figma-green)]/30' : status === 'warning' ? 'bg-[var(--figma-orange)]/20 border-[var(--figma-orange)] alert-warning' : 'bg-[var(--figma-red)]/20 border-[var(--figma-red)] alert-critical pulse-critical');
 
     if (status === 'normal') {
       alertMessage.innerHTML = '<i class="fas fa-check-circle mr-2" style="color:var(--figma-green)"></i>System Normal<br>Pipe temperature is within safe operating range. Current: ' + (useFahrenheit ? cToF(currentTempC).toFixed(1) + '°F' : currentTempC.toFixed(1) + '°C');
@@ -256,14 +274,14 @@
     if (emailEnabled && emailEnabled.checked && !paused) {
       if (status === 'warning' && !emailSentWarning) {
         emailSentWarning = true;
-        sendEmailJS('Warning', currentTempC).then(function () { showToast('Warning email sent.', 'success'); }).catch(function (err) {
+        sendEmailJS('Warning', currentTempC, null, selectedPipeId).then(function () { showToast('Warning email sent.', 'success'); }).catch(function (err) {
           showToast('Email failed: ' + (err.text || err.message || 'Check EmailJS config'), 'error');
           emailSentWarning = false;
         });
       }
       if (status === 'critical' && !emailSentCritical) {
         emailSentCritical = true;
-        sendEmailJS('CRITICAL', currentTempC).then(function () { showToast('Critical alert email sent.', 'success'); }).catch(function (err) {
+        sendEmailJS('CRITICAL', currentTempC, null, selectedPipeId).then(function () { showToast('Critical alert email sent.', 'success'); }).catch(function (err) {
           showToast('Email failed: ' + (err.text || err.message || 'Check EmailJS config'), 'error');
           emailSentCritical = false;
         });
@@ -310,6 +328,7 @@
       let bgColor = 'bg-[var(--figma-bg-card)]';
       let statusColor = 'text-[var(--figma-green)]';
       let statusBg = 'bg-[var(--figma-green)]/20';
+      let cardClass = 'pipe-card cursor-pointer p-3 rounded-[var(--figma-radius)] border ' + borderColor + ' ' + bgColor + ' transition-all hover:opacity-80';
       
       if (status === 'warning') {
         statusColor = 'text-[var(--figma-orange)]';
@@ -317,16 +336,14 @@
       } else if (status === 'critical') {
         statusColor = 'text-[var(--figma-red)]';
         statusBg = 'bg-[var(--figma-red)]/20';
-        borderColor = 'border-[var(--figma-red)]';
-        bgColor = 'bg-[var(--figma-red)]/10';
+        cardClass += ' critical';
       }
       
       if (isSelected) {
-        borderColor = 'border-[var(--figma-red)]';
-        bgColor = 'bg-[var(--figma-red)]/20';
+        cardClass += ' selected';
       }
       
-      return `<div class="pipe-card cursor-pointer p-3 rounded-[var(--figma-radius)] border ${borderColor} ${bgColor} transition-all hover:opacity-80 ${isSelected ? 'ring-2 ring-[var(--figma-red)]' : ''}" data-pipe-id="${pipeId}">
+      return `<div class="${cardClass}" data-pipe-id="${pipeId}">
         <div class="text-center">
           <div class="text-[var(--figma-text-muted)] text-xs mb-1">${pipeId}</div>
           <div class="text-lg font-bold ${statusColor}">${displayTemp.toFixed(1)}${unit}</div>
@@ -459,44 +476,88 @@
     if (c.publicKey) localStorage.setItem('emailjs_publicKey', c.publicKey);
   }
 
-  function sendEmailJS(level, tempC, toEmail) {
+  function sendEmailJS(level, tempC, toEmail, pipeId = null) {
     const c = getEmailJSConfig();
     if (!c.serviceId || !c.templateId || !c.publicKey) return Promise.reject(new Error('EmailJS not configured'));
     if (typeof emailjs === 'undefined') return Promise.reject(new Error('EmailJS not loaded'));
-    toEmail = toEmail || (document.getElementById('emailjsTestTo') && document.getElementById('emailjsTestTo').value.trim()) || '';
+    
+    const targetPipeId = pipeId || selectedPipeId;
+    const pipeData = pipesData[targetPipeId];
+    const tempRate = getTempRateForPipe(targetPipeId);
+    const risk = failureProbability(pipeData.temp, tempRate, pipeData.pumpLoad, pipeData.pressure);
+    const severity = getPipeStatus(pipeData.temp);
+    
+    const isUrgent = severity === 'warning' || severity === 'critical';
+    const subjectPrefix = isUrgent ? 'URGENT: ' : '';
+    const subject = subjectPrefix + 'Pipeline Overheat Risk Detected';
+    
+    const alertEmoji = severity === 'critical' ? '🚨' : severity === 'warning' ? '⚠️' : 'ℹ️';
+    const recommendedAction = severity === 'critical' 
+      ? 'IMMEDIATE ATTENTION REQUIRED: Reduce load and activate cooling systems.'
+      : 'Monitor temperature trends and prepare cooling systems.';
+    
     const params = {
       to_email: toEmail,
       alert_level: level,
-      temperature: tempC.toFixed(1) + '°C (' + cToF(tempC).toFixed(1) + '°F)',
+      pipe_id: targetPipeId,
+      temperature_celsius: pipeData.temp.toFixed(1) + '°C',
+      temperature_fahrenheit: cToF(pipeData.temp).toFixed(1) + '°F',
+      risk_level: severity.toUpperCase(),
+      risk_score: Math.round(risk) + '%',
       timestamp: new Date().toLocaleString(),
-      message: 'Pipe temperature alert: ' + level + '. Current: ' + tempC.toFixed(1) + '°C.'
+      system_status: getStatus(pipeData.temp).toUpperCase(),
+      subject: subject,
+      message: `${alertEmoji} ALERT: Temperature Threshold Exceeded\n\nPipe: ${targetPipeId}\nTemperature: ${pipeData.temp.toFixed(1)}°C / ${cToF(pipeData.temp).toFixed(1)}°F\nRisk Level: ${severity.toUpperCase()}\nTime: ${new Date().toLocaleString()}\n\nRecommended Action:\n${recommendedAction}`
     };
     return emailjs.send(c.serviceId, c.templateId, params, c.publicKey);
   }
 
   function formatTicketId(t) {
-    var d = new Date(t.createdAt);
-    var y = d.getFullYear();
-    var m = String(d.getMonth() + 1).padStart(2, '0');
-    var day = String(d.getDate()).padStart(2, '0');
-    var seq = String(t.id).padStart(4, '0');
-    return 'TKT-' + y + m + day + '-' + seq;
+    const seq = String(t.id).padStart(3, '0');
+    return 'TCK-' + seq;
   }
 
-  function createTicket(isAuto) {
+  function createTicket(isAuto, pipeId = null) {
+    const targetPipeId = pipeId || selectedPipeId;
+    const pipeData = pipesData[targetPipeId];
+    const tempRate = getTempRateForPipe(targetPipeId);
+    const risk = failureProbability(pipeData.temp, tempRate, pipeData.pumpLoad, pipeData.pressure);
+    const severity = getPipeStatus(pipeData.temp);
+    
     var desc = isAuto
       ? 'CRITICAL: Temperature has remained in critical range (≥95°C) for 90+ seconds. Immediate maintenance required.'
-      : (getStatus(currentTempC) === 'critical' ? 'Critical temperature' : 'Manual request') + ' – Temp: ' + currentTempC.toFixed(1) + '°C, Pump: ' + Math.round(pumpLoad) + '%, Pressure: ' + Math.round(pressure) + ' PSI';
+      : (severity === 'critical' ? 'Critical temperature' : 'Manual request') + ' – Temp: ' + pipeData.temp.toFixed(1) + '°C, Pump: ' + Math.round(pipeData.pumpLoad) + '%, Pressure: ' + Math.round(pipeData.pressure) + ' PSI';
+    
     const ticket = {
       id: ticketIdCounter++,
+      pipeId: targetPipeId,
+      temperature: pipeData.temp,
+      riskScore: risk,
+      severity: severity,
       createdAt: Date.now(),
       type: isAuto ? 'auto' : 'manual',
       status: 'open',
-      temperature: currentTempC,
-      pumpLoad: pumpLoad,
-      pressure: pressure,
       description: desc
     };
+    
+    // Call mock API for ticket creation
+    if (window.MockAPI) {
+      window.MockAPI.createMaintenanceTicket({
+        ticketId: formatTicketId(ticket),
+        pipeId: targetPipeId,
+        severity: severity,
+        temperature: pipeData.temp,
+        riskScore: risk,
+        type: ticket.type,
+        description: desc,
+        timestamp: new Date(ticket.createdAt).toISOString()
+      }).then(response => {
+        console.log('Ticket created via API:', response);
+      }).catch(error => {
+        console.error('API call failed:', error);
+      });
+    }
+    
     tickets.push(ticket);
     updateTicketsUI();
     if (isAuto) showToast('Maintenance ticket created automatically after 90s critical.', 'success');
@@ -522,15 +583,23 @@
       const timeStr = new Date(t.createdAt).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
       const statusBtn = t.status === 'open' ? 'Mark Closed' : 'Reopen';
       const tktId = formatTicketId(t);
-      const readings = 'Temp: ' + t.temperature.toFixed(1) + '°C, Load: ' + t.pumpLoad.toFixed(1) + '%, Pressure: ' + t.pressure.toFixed(1) + ' PSI';
+      const severityColor = t.severity === 'critical' ? 'var(--figma-red)' : t.severity === 'warning' ? 'var(--figma-orange)' : 'var(--figma-green)';
+      
       return '<div class="bg-[var(--figma-border)]/50 border border-[var(--figma-border)] rounded-[var(--figma-radius)] p-3 flex flex-wrap items-center justify-between gap-2" data-ticket-id="' + t.id + '">' +
         '<div class="min-w-0 flex-1">' +
-        '<div class="flex flex-wrap items-center gap-2 mb-1"><span class="text-[var(--figma-text)] font-medium">' + tktId + '</span>' +
-        '<span class="text-xs px-1.5 py-0.5 rounded ' + (t.type === 'auto' ? 'bg-[var(--figma-red)]/30 text-[var(--figma-red)]' : 'bg-[var(--figma-orange)]/30 text-[var(--figma-orange)]') + '">' + (t.type === 'auto' ? 'AUTO' : 'MANUAL') + '</span>' +
-        '<span class="text-xs px-1.5 py-0.5 rounded ' + (t.status === 'open' ? 'bg-[var(--figma-green)]/30 text-[var(--figma-green)]' : 'bg-[var(--figma-text-muted)]/30 text-[var(--figma-text-muted)]') + '">' + (t.status === 'open' ? 'OPEN' : 'CLOSED') + '</span></div>' +
-        '<div class="text-[var(--figma-text-muted)] text-sm">' + t.description + '</div>' +
-        '<div class="text-[var(--figma-text-muted)] text-xs mt-1">' + timeStr + '</div>' +
-        '<div class="text-[var(--figma-text-muted)] text-xs mt-0.5">' + readings + '</div></div>' +
+        '<div class="flex flex-wrap items-center gap-2 mb-1">' +
+        '<span class="text-[var(--figma-text)] font-medium">' + tktId + '</span>' +
+        '<span class="text-xs px-1.5 py-0.5 rounded ' + (t.type === 'auto' ? 'bg-[var(--figma-red)]/30 text-[var(--figma-red)]' : 'bg-[var(--figma-orange)]/30 text-[var(--figma-orange)]') + '">' + (t.type === 'auto' ? 'AUTO GENERATED' : 'MANUAL') + '</span>' +
+        '<span class="text-xs px-1.5 py-0.5 rounded ' + (t.status === 'open' ? 'bg-[var(--figma-green)]/30 text-[var(--figma-green)]' : 'bg-[var(--figma-text-muted)]/30 text-[var(--figma-text-muted)]') + '">' + (t.status === 'open' ? 'OPEN' : 'CLOSED') + '</span>' +
+        '</div>' +
+        '<div class="text-[var(--figma-text)] text-sm font-medium mb-1">Pipe: ' + t.pipeId + ' - ' + (t.severity === 'critical' ? 'Critical Temperature' : 'Temperature Alert') + '</div>' +
+        '<div class="text-[var(--figma-text-muted)] text-sm mb-1">' + t.description + '</div>' +
+        '<div class="flex items-center gap-4 text-xs text-[var(--figma-text-muted)]">' +
+        '<span>Temp: <span style="color:' + severityColor + '">' + t.temperature.toFixed(1) + '°C</span></span>' +
+        '<span>Risk: <span style="color:' + severityColor + '">' + Math.round(t.riskScore) + '%</span></span>' +
+        '<span>Time: ' + timeStr + '</span>' +
+        '</div>' +
+        '</div>' +
         '<div class="flex items-center gap-2">' +
         '<button class="ticket-toggle px-3 py-1.5 rounded-[var(--figma-radius)] text-xs bg-[var(--figma-green)] hover:opacity-90 text-white flex items-center gap-1"><i class="fas fa-check"></i> ' + statusBtn + '</button>' +
         '<button class="ticket-export px-3 py-1.5 rounded-[var(--figma-radius)] text-xs bg-[var(--figma-border)] hover:bg-[var(--figma-text-muted)]/30 text-[var(--figma-text)] flex items-center gap-1"><i class="fas fa-download"></i> Export</button>' +
@@ -550,7 +619,7 @@
         const id = parseInt(card.getAttribute('data-ticket-id'), 10);
         const t = tickets.find(function (x) { return x.id === id; });
         if (!t) return;
-        const text = 'Maintenance Ticket #' + t.id + '\nType: ' + t.type + '\nStatus: ' + t.status + '\nCreated: ' + new Date(t.createdAt).toLocaleString() + '\n\n' + t.description + '\nTemperature: ' + t.temperature.toFixed(1) + '°C\nPump Load: ' + Math.round(t.pumpLoad) + '%\nPressure: ' + Math.round(t.pressure) + ' PSI';
+        const text = 'Maintenance Ticket #' + t.id + '\nPipe: ' + t.pipeId + '\nType: ' + t.type + '\nStatus: ' + t.status + '\nSeverity: ' + t.severity + '\nCreated: ' + new Date(t.createdAt).toLocaleString() + '\n\n' + t.description + '\nTemperature: ' + t.temperature.toFixed(1) + '°C\nRisk Score: ' + Math.round(t.riskScore) + '%';
         const a = document.createElement('a');
         a.href = URL.createObjectURL(new Blob([text], { type: 'text/plain' }));
         a.download = 'ticket-' + t.id + '.txt';
@@ -575,7 +644,7 @@
       const elapsed = Math.floor((Date.now() - criticalStartTime) / 1000);
       updateCriticalDurationUI(elapsed, true);
       if (elapsed >= CRITICAL_AUTO_TICKET_SEC) {
-        createTicket(true);
+        createTicket(true, selectedPipeId);
         criticalStartTime = Date.now();
       }
     }, 1000);
@@ -818,7 +887,7 @@
       return;
     }
     saveEmailJSConfig();
-    sendEmailJS('Test', currentTempC, toEmail).then(function () {
+    sendEmailJS('Test', currentTempC, toEmail, selectedPipeId).then(function () {
       showToast('Test email sent to ' + toEmail, 'success');
     }).catch(function (err) {
       showToast('Send failed: ' + (err.text || err.message || 'Check config'), 'error');
