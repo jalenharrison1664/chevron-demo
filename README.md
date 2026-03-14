@@ -1,309 +1,309 @@
-Chevron Industrial Pipe Monitoring Dashboard
-Description
+Technology Stack Breakdown
+1. Frontend Stack
 
-This project was created for the Chevron Hack Island challenge. It demonstrates an autonomous industrial pipe monitoring system designed to Detect → Decide → Act → Explain pipe temperature anomalies without human intervention.
+HTML5 + Tailwind CSS + Vanilla JavaScript
 
-The dashboard simulates an industrial control panel that monitors pipe temperatures, predicts potential failures, automatically generates maintenance tickets, and logs system communications.
+HTML5 — Structure Layer
 
-Features
+Purpose:
+Defines the page structure and content.
 
-Multi-Pipe Temperature Monitoring
-Real-time monitoring of 6 industrial pipes with independent temperature sensors and historical tracking.
+Role in this project:
 
-Autonomous AI-Driven Workflow
-Implements a Detect → Decide → Act → Explain pipeline for automated maintenance response.
+Creates the dashboard layout
 
-Advanced Risk Prediction
-Overheat risk prediction using a weighted algorithm:
+Defines panels, forms, and UI elements
 
-40% Temperature
+Simplified:
+The skeleton or blueprint of the interface.
 
-30% Temperature Rate
+Tailwind CSS — Styling Layer
 
-20% Pump Load
+Purpose:
+Provides utility classes for styling without writing custom CSS.
 
-10% Pressure
+Role in this project:
 
-Failure Prediction System
-Estimates time to failure with confidence levels based on system trends.
+Creates the professional dashboard appearance
 
-Automated Maintenance System
-Automatically generates maintenance tickets after prolonged critical temperature conditions.
+Controls colors, spacing, and layout
 
-Technician Dispatch System
-Automatically assigns technicians and tracks maintenance workflow stages.
+Enables responsive design
 
-Dynamic Ticket Sorting
-Maintenance tickets can be sorted by:
+Simplified:
+The visual design system that makes the dashboard look polished.
 
-Pipe ID
+Vanilla JavaScript — Logic Layer
 
-Temperature (descending)
+Purpose:
+Handles all interactivity and application logic.
 
-Risk Percentage (descending)
-
-Real-time Alerts
-Visual alerts and automated email notifications for critical conditions.
-
-Interactive Dashboard
-Active pipes are highlighted with blue selection indicators and live monitoring status.
-
-Data Export
-Monitoring data can be exported as TXT, CSV, or HTML reports.
-
-Email Notifications
-EmailJS integration for sending automated alerts without a backend server.
-
-Communications Hub
-Logs system communications and maintenance workflow events.
-
-Responsive Industrial UI
-Modern dark-theme dashboard styled to resemble an industrial control panel.
-
-Technologies Used
-HTML5
-
-Provides the structural foundation of the dashboard.
-
-Used for:
-
-Dashboard layout and sections
-
-Panels, forms, and monitoring components
-
-Semantic structure and accessibility
-
-Tailwind CSS
-
-Utility-first CSS framework used for styling and responsive layout.
-
-Used for:
-
-Dashboard grid layouts
-
-Industrial dark theme styling
-
-Spacing, typography, and UI components
-
-Status indicators and responsive behavior
-
-JavaScript (ES6+)
-
-Handles all application logic and system behavior.
-
-Used for:
+Role in this project:
 
 Temperature simulation
 
-Risk and failure prediction algorithms
+Alert system
 
-Maintenance ticket generation
+Maintenance workflow
 
-Workflow state management
+Communications hub logic
 
-Dynamic UI updates
+Simplified:
+The brain of the system that processes data and controls behavior.
 
-Event handling and system control
+2. Data Visualization Stack
 
-Chart.js
+Chart.js + Canvas API
 
-Data visualization library used to display monitoring data.
+Chart.js — Charting Library
 
-Used for:
+Purpose:
+Creates interactive charts and graphs.
 
-Temperature history charts
+Role in this project:
 
-Threshold visualization
+Displays the temperature history chart
 
-Real-time chart updates
+Draws threshold warning lines
 
-Font Awesome
+Simplified:
+The tool that generates the temperature graph.
 
-Icon library used to enhance the dashboard interface.
+Canvas API — Rendering Engine
 
-Used for:
+Purpose:
+Provides low-level graphics rendering in the browser.
 
-Status indicators
+Role in this project:
 
-Alert icons
+Renders the Chart.js visualizations
 
-Navigation and UI elements
+Simplified:
+The drawing surface used for charts.
 
-EmailJS
+3. Communication Stack
 
-Third-party service used for sending emails without a backend.
+EmailJS + REST API
 
-Used for:
+EmailJS — Email Service
 
-Automated critical temperature alerts
+Purpose:
+Sends emails without needing a backend server.
 
-Maintenance notifications
+Role in this project:
 
-Test email functionality from the dashboard
+Sends email alerts when temperature remains critical for extended periods
 
-System Architecture
+Simplified:
+The service responsible for sending alert emails.
 
-The system follows a Detect → Decide → Act → Explain pipeline.
+REST API — Data Layer
 
-Sensor Data
-     │
-     ▼
-Monitoring System
-     │
-     ▼
-Risk & Failure Prediction
-     │
-     ▼
-Maintenance Ticket Creation
-     │
-     ▼
-Technician Dispatch
-     │
-     ▼
-Communications Hub + Email Alerts
-System Components
-Detection Layer
+Purpose:
+Handles communication between systems.
 
-Responsible for monitoring sensor data and identifying anomalies.
+Role in this project:
 
-Components
+Simulates API behavior using a mock API
 
-Temperature monitoring system
+Supports data export features
 
-Multi-pipe sensor simulation
+Simplified:
+The data messenger between system components.
 
-Threshold detection logic
+4. Architecture Pattern
+Single Page Application (SPA)
+SPA Architecture
 
-Functions
+Purpose:
+Runs the entire application within one HTML page.
 
-Detect abnormal temperature spikes
+Role in this project:
 
-Monitor temperature rate changes
+Allows the dashboard to update dynamically
 
-Track pressure and pump load
+Eliminates page reloads
 
-Decision Layer
+Simplified:
+A single-page application that updates in real time.
 
-Evaluates anomalies and determines system risk levels.
+5. State Management
 
-Components
+JavaScript Variables + Local Storage
 
-Risk prediction algorithm
+JavaScript Variables — Runtime State
 
-Failure prediction system
+Purpose:
+Stores the current state of the application in memory.
 
-Functions
+Role in this project:
 
-Calculate overheat risk
+Temperature readings
 
-Predict estimated time to failure
+Maintenance tickets
 
-Generate confidence scores
+Workflow states
 
-Action Layer
+Simplified:
+Temporary memory used during the current session.
 
-Responds to critical events by initiating maintenance workflows.
+Local Storage — Persistent State
 
-Components
+Purpose:
+Stores data that remains after the browser closes.
 
-Maintenance ticket system
+Role in this project:
 
-Technician assignment system
+EmailJS configuration
 
-Parts reservation system
+User preferences
 
-Workflow Stages
+Simplified:
+Long-term memory stored in the browser.
 
-OPEN → RESOLVED → CLOSED
-Communication Layer
+6. Component Architecture
 
-Handles communication between subsystems and logs system activity.
+Monolithic Dashboard + Modular Functions
 
-Components
+Dashboard Components
+
+Temperature Monitor
+
+Simulates real-time sensor readings.
+
+Risk Prediction
+
+Performs AI-style analysis and predicts potential failures.
+
+Maintenance System
+
+Handles ticket creation and workflow management.
 
 Communications Hub
 
-Email alert system
+Logs system events and cross-system interactions.
 
-Functions
+Export System
 
-Log system events
+Enables exporting monitoring data.
 
-Send automated alerts
+7. Design System
 
-Track maintenance workflow progress
+Figma Design Tokens + CSS Variables
 
-Explanation Layer
+Figma Design Tokens
 
-Provides context for system actions and decisions.
+Purpose:
+Standardized design values defined in Figma.
 
-Components
+Role in this project:
 
-AI system explanation generator
+Colors
 
-Maintenance workflow logs
+Spacing
 
-Functions
+Typography
 
-Explain why alerts were triggered
+Simplified:
+The design rulebook ensuring consistent UI appearance.
 
-Document maintenance actions
+CSS Variables
 
-Provide traceable decision history
+Purpose:
+Dynamic CSS values that can be reused and updated.
 
-How to Run
+Role in this project:
 
-Clone the repository:
+Theme colors
 
-git clone https://github.com/jalenharrison1664/chevron-demo.git
+Responsive values
 
-Navigate to the project folder:
+Simplified:
+Adjustable design settings used throughout the interface.
 
-cd chevron-demo
+8. Stack Summary by Function
+Monitoring Stack
 
-Open the dashboard in your browser:
+Sensors: JavaScript simulation
+Display: HTML + Tailwind CSS
+Charts: Chart.js
+Alerts: JavaScript + EmailJS
 
-open index.html
+Maintenance Stack
 
-Or run a local server:
+Tickets: JavaScript state management
+Workflow: JavaScript logic
+Communications: JavaScript logging
+Interface: HTML + Tailwind CSS
 
-python -m http.server 8000
+Integration Stack
 
-Then visit:
+Cross-system communication: JavaScript event system
+Data flow: JavaScript variables
+User interface: HTML + Tailwind CSS
+Persistence: Local Storage
 
-http://localhost:8000
-Future Improvements
+Backend Status: None Required
 
-Integration with real industrial sensor hardware
+This project uses a pure frontend architecture, meaning all functionality runs entirely in the browser.
 
-Machine learning model for enhanced failure prediction
+No backend server is required.
 
-Mobile application for remote monitoring
+How the System Works Without a Backend
+Data Simulation
 
-Integration with industrial SCADA systems
+Temperature data generated using JavaScript math functions
+Sensor readings simulated using random walk algorithms
+System states stored in JavaScript variables
 
-Multi-user authentication and role-based access
+Email Service
 
-Advanced analytics and predictive maintenance scheduling
+EmailJS handles sending emails
+Emails are sent directly from the browser
+Configuration is stored in Local Storage
 
-IoT device management and calibration tools
+Data Persistence
+
+Local Storage stores persistent data
+JavaScript variables manage session state
+No database is required
+
+API Simulation
+
+Mock API implemented using JavaScript functions
+Export features generate files directly in the browser
+No server endpoints are required
+
+Why No Backend?
+Advantages
+
+Easy deployment — simply upload files to a web server
+No server costs — runs entirely in the browser
+Fast performance — no network latency for most operations
+Simple architecture — fewer components to maintain
+
+When a Backend Would Be Needed
+
+A backend would be required if the system needed:
+
+Real sensor data from physical hardware
+
+Multiple users sharing the system
+
+Database storage for long-term records
+
+User authentication and login systems
 
 Current Architecture
 
-This system currently runs as a pure frontend monitoring simulation.
+This system is a fully client-side industrial monitoring dashboard that combines:
 
-All processing occurs directly in the browser using JavaScript without requiring a backend server.
+real-time simulation
 
-Future versions could integrate:
+predictive maintenance logic
 
-IoT sensors
+automated alerts
 
-Cloud databases
+maintenance workflow management
 
-Real industrial monitoring systems
-
-If you'd like, I can also help you add two README sections that make hackathon judges and recruiters much more impressed:
-
-Architecture Diagram (visual version)
-
-Detect → Decide → Act → Explain explanation section that reads like an AI pipeline.
+All running directly in the browser.
